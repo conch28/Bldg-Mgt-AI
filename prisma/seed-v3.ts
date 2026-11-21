@@ -95,7 +95,7 @@ export async function seedV3({ prisma, rnd, units, owner, NOW }: Ctx) {
   units.filter((u) => u.ownerId && u.ownerId !== owner.id).slice(0, 34).forEach((u, i) => {
     const pet = i % 3 === 0;
     regs.push({ unitId: u.id, userId: u.ownerId!, kind: pet ? "PET" : "VEHICLE", name: pet ? pick(["Bruno", "Coco", "Luna", "Max", "Kitkat", "Choco"]) : `${pick(["NBC", "DAE", "NXT", "CAR", "PQR"])} ${1000 + Math.floor(rnd() * 8999)}`,
-      details: pet ? pick(["Cat, Puspin", "Dog, Poodle", "Dog, Pomeranian", "Cat, Persian"]) : pick(["Grey Honda City", "Black Mitsubishi Montero", "White Toyota Innova", "Red Suzuki Swift"]) + ` · slot B${1 + (i % 3)}-${100 + i}`,
+      details: pet ? pick(["Cat, Puspin", "Dog, Poodle", "Dog, Pomeranian", "Cat, Persian"]) : pick(["Grey Honda City", "Black Mitsubishi Montero", "White Toyota Innova", "Red Suzuki Swift"]) + ` · slot B${1 + (i % 2)}-${100 + i}`,
       status: i < 31 ? "APPROVED" : "PENDING", sticker: i < 31 ? `${pet ? "P" : "V"}-${1002 + i}` : null, createdAt: ago(5 + rnd() * 300) });
   });
   await prisma.registration.createMany({ data: regs });

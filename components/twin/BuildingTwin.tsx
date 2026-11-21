@@ -61,6 +61,9 @@ export default function BuildingTwin({ data, staff, compact }: { data: TwinData;
   const [failed, setFailed] = useState(false);
   const [motion, setMotion] = useState(true);
   const [dark, setDark] = useState(false);
+  const [labels, setLabels] = useState(true);
+  const labelsRef = useRef(true);
+  useEffect(() => { labelsRef.current = labels; sceneRef.current?.setLabels(labels); }, [labels]);
 
   const unitBy = useMemo(() => new Map(data.units.map((u) => [u.code, u])), [data.units]);
   const zoneBy = useMemo(() => new Map(data.zones.map((z) => [z.id, z])), [data.zones]);
@@ -102,6 +105,7 @@ export default function BuildingTwin({ data, staff, compact }: { data: TwinData;
         });
         setFailed(false);
         repaint();
+        sceneRef.current.setLabels(labelsRef.current);
       } catch (e) { console.error("3D view failed", e); setFailed(true); }
     }).catch((e) => { console.error("3D view failed to load", e); setFailed(true); });
     return () => { alive = false; sceneRef.current?.dispose(); sceneRef.current = null; };
@@ -181,15 +185,30 @@ export default function BuildingTwin({ data, staff, compact }: { data: TwinData;
         )}
       </div>
 
+      <div className="twin-legend twin-areas" aria-label="Building areas">
+        <span className="hint">Areas:</span>
+        <button className="lg-btn" onClick={() => setSel("zone:lobby")}><i className="lg" style={{ background: dark ? "#2bb3a3" : "#5fd0c2" }} />Shared spaces</button>
+        <button className="lg-btn" onClick={() => setSel("zone:parking")}><i className="lg" style={{ background: "#6b7d96", backgroundImage: "repeating-linear-gradient(90deg,transparent 0 3px,#fff 3px 4px)" }} />Parking B1-B2</button>
+        <button className="lg-btn" onClick={() => setSel("zone:amenity")}>Pool deck &amp; {SITE.amenityFloor}F amenities</button>
+        <button className="lg-btn" onClick={() => setSel("zone:core")}>Lifts &amp; systems</button>
+      </div>
+
       <div className="twin-body">
         <div className="twin-stage">
           {view === "3d" && !failed && (
             <>
               <div ref={host} className="twin-canvas" aria-label={`3D model of ${data.building}. Use the list beside it to open each unit.`} role="img" />
-              <div className="twin-tools">
-                {sel && <button className="btn sm" onClick={() => setSel(null)}>Reset view</button>}
+              <div className="twin-nav" role="group" aria-label="Move the view">
+                <button className="twin-nb" aria-label="Zoom in" title="Zoom in" onClick={() => sceneRef.current?.zoom(0.75)}>+</button>
+                <button className="twin-nb" aria-label="Zoom out" title="Zoom out" onClick={() => sceneRef.current?.zoom(1.33)}>&minus;</button>
+                <span className="twin-nsep" />
+                <button className="twin-nb" aria-label="Move up the towers" title="Higher floors" onClick={() => sceneRef.current?.pan(5)}>&#9650;</button>
+                <button className="twin-nb" aria-label="Move down the towers" title="Lower floors" onClick={() => sceneRef.current?.pan(-5)}>&#9660;</button>
+                <span className="twin-nsep" />
+                <button className={"twin-nb" + (labels ? " on" : "")} aria-pressed={labels} aria-label="Show area labels" title="Area labels" onClick={() => setLabels(!labels)} style={{ fontSize: 13 }}>Aa</button>
+                <button className="twin-nb" aria-label="Reset view" title="Reset view" onClick={() => { if (sel) setSel(null); else sceneRef.current?.reset(); }}>&#8634;</button>
               </div>
-              <div className="twin-hint hint">Drag sideways to turn · tap a unit</div>
+              <div className="twin-hint hint">Drag sideways to turn · pinch or Ctrl+scroll to zoom · tap a unit</div>
             </>
           )}
           {(view === "2d" || failed) && <Stack2D data={data} mode={mode} sel={sel} onPick={setSel} color={unitColor} motion={motion} />}
@@ -342,9 +361,18 @@ function ZonePanel({ z, onClose }: { z: TwinZone; onClose: () => void }) {
         <div><h4>{z.label}</h4><div className="hint">{z.state ? STATE_WORD[z.state] : "No open issues"}</div></div>
         <button className="btn sm" onClick={onClose} aria-label="Close">Close</button>
       </div>
+      <div className="hint" style={{ margin: "6px 0" }}>{z.about}</div>
       {z.watch && <div className="twin-warn watch"><b>Early warning:</b> {z.watch}</div>}
       {z.tickets.map((t) => <TicketRow key={t.n} t={t} />)}
       {!z.tickets.length && <div className="hint" style={{ marginTop: 8 }}>No repairs open or fixed in the last 48 hours.</div>}
+      {z.info.map((g) => (
+        <details key={g.head} className="twin-info" open={z.id === "amenity"}>
+          <summary><b>{g.head}</b></summary>
+          {g.rows.length ? g.rows.slice(0, 60).map((r, i) => <div key={i} className="twin-irow"><span>{r.label}</span><span className="hint">{r.sub}</span></div>) : <div className="hint">None today.</div>}
+          {g.rows.length > 60 && <div className="hint">+{g.rows.length - 60} more</div>}
+        </details>
+      ))}
+      {z.id === "amenity" && <Link className="btn sm" href="/amenities" style={{ marginTop: 8 }}>Open bookings</Link>}
     </div>
   );
 }

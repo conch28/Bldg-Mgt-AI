@@ -14,6 +14,9 @@ export type TwinScene = {
   paint: (p: Paint[]) => void;
   select: (key: string | null) => void;
   reset: () => void;
+  setLabels: (on: boolean) => void;
+  zoom: (factor: number) => void; // <1 closer, >1 farther
+  pan: (floors: number) => void; // + up, - down
   setTheme: (dark: boolean) => void;
   dispose: () => void;
 };
@@ -31,19 +34,37 @@ const SLOT: Record<string, [number, number, number, number]> = {
 const PH_SLOT: Record<string, [number, number, number, number]> = { "01": [-1.95, 0, 3.5, 7.4], "02": [1.95, 0, 3.5, 7.4] };
 const GLOW: Record<string, string> = { red: "#ff3b30", amber: "#ffb020", watch: "#a26bff" };
 
-function label(text: string) {
+function label(text: string, kind: "tower" | "shared" | "park" = "tower") {
   const c = document.createElement("canvas");
-  c.width = 256; c.height = 64;
   const g = c.getContext("2d")!;
-  g.fillStyle = "rgba(15,30,50,.78)";
-  g.beginPath(); g.roundRect(8, 8, 240, 48, 24); g.fill();
-  g.fillStyle = "#fff"; g.font = "600 28px system-ui, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
-  g.fillText(text, 128, 33);
+  const font = kind === "tower" ? "600 28px system-ui, sans-serif" : "600 24px system-ui, sans-serif";
+  g.font = font;
+  const w = Math.ceil(g.measureText(text).width) + 44;
+  c.width = w; c.height = 64;
+  g.fillStyle = kind === "tower" ? "rgba(15,30,50,.78)" : kind === "shared" ? "rgba(13,120,110,.9)" : "rgba(60,72,96,.92)";
+  g.beginPath(); g.roundRect(4, 8, w - 8, 48, 24); g.fill();
+  g.fillStyle = "#fff"; g.font = font; g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillText(text, w / 2, 33);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
-  sp.scale.set(4, 1, 1); sp.renderOrder = 20;
+  const k = kind === "tower" ? 1 : 0.8;
+  sp.scale.set((w / 64) * k, k, 1); sp.renderOrder = 20;
   return sp;
+}
+
+/** Top-down parking-bay stripes for the basement slabs. */
+function parkingTexture() {
+  const c = document.createElement("canvas");
+  c.width = 512; c.height = 256;
+  const g = c.getContext("2d")!;
+  g.fillStyle = "#8394ab"; g.fillRect(0, 0, 512, 256);
+  g.strokeStyle = "rgba(255,255,255,.85)"; g.lineWidth = 3;
+  for (const y0 of [12, 156]) for (let x = 8; x <= 504; x += 24) { g.beginPath(); g.moveTo(x, y0); g.lineTo(x, y0 + 88); g.stroke(); }
+  g.setLineDash([14, 10]); g.beginPath(); g.moveTo(0, 128); g.lineTo(512, 128); g.stroke();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
 export function createTwinScene(opts: {
@@ -71,8 +92,12 @@ export function createTwinScene(opts: {
   controls.target.copy(home.target);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-  controls.enablePan = false;
-  controls.enableZoom = false; // tapping a unit zooms instead
+  controls.enablePan = true; // two fingers on phones, right-drag on desktop
+  controls.screenSpacePanning = true;
+  controls.enableZoom = true; // pinch on phones; ctrl/⌘ + wheel or the buttons on desktop
+  controls.zoomToCursor = false;
+  controls.minDistance = 9;
+  controls.maxDistance = 95;
   controls.minPolarAngle = 0.95;
   controls.maxPolarAngle = 1.5;
   controls.autoRotate = opts.motion;
@@ -83,6 +108,13 @@ export function createTwinScene(opts: {
   renderer.domElement.style.touchAction = "pan-y";
   const wheelFn = (controls as unknown as { _onMouseWheel?: EventListener })._onMouseWheel;
   if (wheelFn) renderer.domElement.removeEventListener("wheel", wheelFn);
+  // plain wheel scrolls the page; ctrl/⌘ + wheel (and trackpad pinch, which sends ctrlKey) zooms the model
+  const onWheel = (e: WheelEvent) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    zoomNow(Math.exp(Math.max(-0.5, Math.min(0.5, e.deltaY * 0.004))));
+  };
+  renderer.domElement.addEventListener("wheel", onWheel, { passive: false });
 
   const hemi = new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.6);
   scene.add(hemi);
@@ -94,8 +126,12 @@ export function createTwinScene(opts: {
   const unitMat = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.05 });
   const slabMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
   const coreMat = new THREE.MeshStandardMaterial({ roughness: 0.8 });
-  const groundMat = new THREE.MeshStandardMaterial({ roughness: 1, transparent: true, opacity: 0.7 });
+  const groundMat = new THREE.MeshStandardMaterial({ roughness: 1, transparent: true, opacity: 0.4, depthWrite: false });
   const parkMat = new THREE.MeshStandardMaterial({ roughness: 0.9, transparent: true, opacity: 0.85 });
+  const parkTex = parkingTexture();
+  const lotMat = new THREE.MeshStandardMaterial({ roughness: 0.9, map: parkTex }); // parking levels: their own colour + bay stripes
+  const lotSide = new THREE.MeshStandardMaterial({ roughness: 0.9, color: "#6b7d96" });
+  const sharedMat = new THREE.MeshStandardMaterial({ roughness: 0.3, transparent: true, opacity: 0.75 }); // shared spaces
   const glassMat = new THREE.MeshStandardMaterial({ roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.55 });
   const poolMat = new THREE.MeshStandardMaterial({ color: "#38bdf8", roughness: 0.2 });
   const padMat = new THREE.MeshStandardMaterial({ color: "#f5b301", roughness: 0.6 });
@@ -123,6 +159,8 @@ export function createTwinScene(opts: {
   scene.add(inst);
 
   const lobby = new THREE.Group(), core = new THREE.Group(), amenity = new THREE.Group();
+  const tags = new THREE.Group(); // area labels (toggle)
+  scene.add(tags);
   for (const t of TOWERS) {
     const x = TX[t.id];
     // floor slabs (2 to roof)
@@ -141,17 +179,21 @@ export function createTwinScene(opts: {
     crown.scale.set(3.6, 0.7, 3.6); crown.position.set(x, top + 0.4, 0);
     core.add(crown);
     // glass lobby on the ground floor
-    const lb = new THREE.Mesh(box, glassMat);
+    const lb = new THREE.Mesh(box, sharedMat);
     lb.scale.set(PLATE - 0.4, H - 0.06, PLATE - 0.4); lb.position.set(x, yOf(1), 0);
     lobby.add(lb);
     // 5th-level amenities inside the tower (gym, function rooms)
-    const am = new THREE.Mesh(box, glassMat);
+    const am = new THREE.Mesh(box, sharedMat);
     am.scale.set(PLATE - 0.4, H - 0.08, PLATE - 0.4); am.position.set(x, yOf(SITE.amenityFloor), 0);
     amenity.add(am);
     const tag = label(t.label);
     tag.position.set(x, top + 2.1, 0);
     scene.add(tag);
+    const lt = label(`${t.label} lobby`, "shared"); lt.position.set(x, yOf(1) + 0.2, PLATE / 2 + 0.9); tags.add(lt);
+    const lift = label("2 lifts", "shared"); lift.position.set(x + (x < 0 ? -2.9 : 2.9), top + 0.6, 0); tags.add(lift);
   }
+  const gym = label(`Gym · function rooms (${SITE.amenityFloor}F)`, "shared"); gym.position.set(TX.A - 1, yOf(SITE.amenityFloor) + 0.3, PLATE / 2 + 1.1); tags.add(gym);
+  const heli = label("Helipad", "shared"); heli.position.set(TX.A + 2.6, top + 1.2, -1.2); tags.add(heli);
   // helipad on Tower A's roof (which tower has it is our assumption)
   const pad = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 0.06, 32), padMat);
   pad.position.set(TX.A, top + 0.8, 0);
@@ -169,13 +211,15 @@ export function createTwinScene(opts: {
   pool.scale.set(podW * 0.62, 0.05, PLATE * 0.42); pool.position.set(0, podH + 0.17, 0.9);
   amenity.add(podium, deck, pool);
   scene.add(amenity);
+  const poolTag = label("Pool deck", "shared"); poolTag.position.set(0, podH + 0.9, PLATE / 2 + 0.4); tags.add(poolTag);
 
   // parking: two basement levels under the whole site
   const parking = new THREE.Group();
   for (let b = 1; b <= 2; b++) {
-    const p = new THREE.Mesh(box, parkMat);
-    p.scale.set(TX.B - TX.A + PLATE + 3, H - 0.08, PLATE + 3); p.position.set(0, -b * H + H / 2 - 0.08, 0);
+    const p = new THREE.Mesh(box, [lotSide, lotSide, lotMat, lotSide, lotSide, lotSide]);
+    p.scale.set(TX.B - TX.A + PLATE + 3, H - 0.1, PLATE + 3); p.position.set(0, -b * H + H / 2 - 0.1 * b, 0);
     parking.add(p);
+    const pt = label(`Parking B${b}`, "park"); pt.position.set(-(TX.B - TX.A + PLATE + 3) / 2 + 2.2, p.position.y, (PLATE + 3) / 2 + 0.5); tags.add(pt);
   }
   scene.add(parking);
   const ground = new THREE.Mesh(new THREE.CircleGeometry(30, 48), groundMat);
@@ -256,6 +300,33 @@ export function createTwinScene(opts: {
     const target = isUnit ? new THREE.Vector3(tx + (b.c.x - tx) * 0.5, b.c.y, b.c.z * 0.4) : new THREE.Vector3(b.c.x * 0.3, Math.max(b.c.y, top * 0.3), 0);
     flyTo(target.clone().add(dir.multiplyScalar(dist)).add(new THREE.Vector3(0, 5, 0)), target);
   }
+  const offset = new THREE.Vector3();
+  const clampTarget = () => {
+    const t = controls.target;
+    t.y = Math.max(0, Math.min(top + 1, t.y));
+    t.x = Math.max(-14, Math.min(14, t.x)); t.z = Math.max(-10, Math.min(10, t.z));
+  };
+  function zoomNow(f: number) { // immediate (wheel)
+    tween = null;
+    offset.copy(camera.position).sub(controls.target);
+    const d = Math.max(controls.minDistance, Math.min(controls.maxDistance, offset.length() * f));
+    camera.position.copy(controls.target).add(offset.setLength(d));
+    controls.autoRotate = false; kick();
+  }
+  function zoom(f: number) { // eased (buttons)
+    const base = tween ? tween.to : [camera.position.clone(), controls.target.clone()] as [THREE.Vector3, THREE.Vector3];
+    offset.copy(base[0]).sub(base[1]);
+    const d = Math.max(controls.minDistance, Math.min(controls.maxDistance, offset.length() * f));
+    controls.autoRotate = false;
+    flyTo(base[1].clone().add(offset.clone().setLength(d)), base[1].clone());
+  }
+  function pan(floors: number) {
+    const base = tween ? tween.to : [camera.position.clone(), controls.target.clone()] as [THREE.Vector3, THREE.Vector3];
+    const ny = Math.max(0, Math.min(top + 1, base[1].y + floors * H));
+    const dy = ny - base[1].y;
+    controls.autoRotate = false;
+    flyTo(base[0].clone().add(new THREE.Vector3(0, dy, 0)), base[1].clone().add(new THREE.Vector3(0, dy, 0)));
+  }
   function reset() {
     selBox.visible = false; selFloor.visible = false;
     flyTo(home.pos.clone(), home.target.clone());
@@ -268,6 +339,8 @@ export function createTwinScene(opts: {
     coreMat.color.set(dark ? "#1c2a3d" : "#aab6c3");
     groundMat.color.set(dark ? "#13233a" : "#d5dee6");
     parkMat.color.set(dark ? "#22344c" : "#b9c4cf");
+    sharedMat.color.set(dark ? "#2bb3a3" : "#5fd0c2");
+    lotSide.color.set(dark ? "#3b4a63" : "#6b7d96");
     glassMat.color.set(dark ? "#4fb6c9" : "#9fd6dd");
     hemi.intensity = dark ? 1.25 : 1.6;
     kick();
@@ -345,16 +418,17 @@ export function createTwinScene(opts: {
     else raf = 0;
   }
   function kick() { idleFrames = 0; if (!raf) raf = requestAnimationFrame(frame); }
-  controls.addEventListener("change", kick);
+  controls.addEventListener("change", () => { clampTarget(); kick(); });
   const onVis = () => kick();
   document.addEventListener("visibilitychange", onVis);
 
   return {
-    paint, select, reset, setTheme,
+    paint, select, reset, setTheme, zoom, pan,
+    setLabels(on: boolean) { tags.visible = on; kick(); },
     dispose() {
       cancelAnimationFrame(raf); ro.disconnect(); io.disconnect();
       document.removeEventListener("visibilitychange", onVis);
-      el.removeEventListener("pointerdown", onDown); el.removeEventListener("pointerup", onUp);
+      el.removeEventListener("pointerdown", onDown); el.removeEventListener("pointerup", onUp); el.removeEventListener("wheel", onWheel);
       controls.dispose();
       scene.traverse((o) => { const x = o as THREE.Mesh; x.geometry?.dispose?.(); const mt = x.material as THREE.Material | THREE.Material[] | undefined; if (Array.isArray(mt)) mt.forEach((q) => q.dispose()); else mt?.dispose?.(); });
       renderer.dispose(); el.remove();

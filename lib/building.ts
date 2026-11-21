@@ -23,7 +23,8 @@ export type TwinUnit = {
 export type Occupancy = "OWNER" | "LEASED" | "VACANT" | "UNKNOWN";
 export type Market = "SALE" | "LEASE" | "NONE";
 export type DuesBucket = "PAID" | "DUE" | "LATE30" | "LATE90" | "LATE90P";
-export type TwinZone = { id: "lobby" | "parking" | "amenity" | "core"; label: string; state: TwinState; tickets: TwinTicket[]; locations: string[]; watch: string | null };
+export type ZoneInfo = { head: string; rows: { label: string; sub: string }[] };
+export type TwinZone = { id: "lobby" | "parking" | "amenity" | "core"; label: string; about: string; state: TwinState; tickets: TwinTicket[]; locations: string[]; watch: string | null; info: ZoneInfo[] };
 export type TwinData = {
   building: string; units: TwinUnit[]; zones: TwinZone[];
   counts: { red: number; amber: number; green: number; watch: number }; happyAvg: number | null; now: number;
@@ -60,9 +61,13 @@ export async function buildingTwin(role: Role): Promise<TwinData> {
     prisma.lease.findMany({ where: { end: { gte: new Date(now) }, start: { lte: new Date(now) } }, select: { tenantName: true, end: true, unit: { select: { code: true } } } }),
     earlyWarnings(),
   ]);
-  const [listings, unpaid] = await Promise.all([
+  const ymd = new Date(now).toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+  const dayStart = new Date(ymd + "T00:00:00+08:00"), dayEnd = new Date(dayStart.getTime() + 86400000);
+  const [listings, unpaid, bookings, vehicles] = await Promise.all([
     prisma.listing.findMany({ where: { status: "LIVE" }, select: { unitId: true, kind: true, price: true } }),
     prisma.bill.findMany({ where: { status: { not: "PAID" } }, select: { unitId: true, amount: true, paid: true, dueDate: true } }),
+    prisma.amenityBooking.findMany({ where: { status: "CONFIRMED", start: { gte: dayStart, lt: dayEnd } }, select: { start: true, end: true, guests: true, amenity: { select: { name: true } }, unit: { select: { code: true } } }, orderBy: { start: "asc" } }),
+    prisma.registration.findMany({ where: { kind: "VEHICLE", status: "APPROVED" }, select: { name: true, details: true, unit: { select: { code: true } } } }),
   ]);
   const listBy = new Map<string, { kind: string; price: number }>();
   for (const l of listings) { const cur = listBy.get(l.unitId); if (!cur || l.kind === "SALE") listBy.set(l.unitId, { kind: l.kind, price: Number(l.price) }); }
@@ -116,15 +121,28 @@ export async function buildingTwin(role: Role): Promise<TwinData> {
     };
   });
 
-  const ZONES: { id: TwinZone["id"]; label: string }[] = [
-    { id: "lobby", label: "Lobbies and entrance" }, { id: "parking", label: "Parking (B1-B2)" },
-    { id: "amenity", label: `Pool deck and ${SITE.amenityFloor}th-floor amenities` }, { id: "core", label: "Elevators and building systems" },
+  const hm = (d: Date) => d.toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" });
+  const lvl = (d: string) => d.match(/slot\s+(B\d)-/i)?.[1]?.toUpperCase() ?? "Unassigned";
+  const levels = ["B1", "B2", "Unassigned"].map((L) => ({ L, list: vehicles.filter((v) => lvl(v.details) === L) })).filter((x) => x.list.length);
+  const INFO: Record<TwinZone["id"], ZoneInfo[]> = {
+    amenity: [{ head: `Bookings today (${bookings.length})`, rows: bookings.map((b) => ({ label: `${b.amenity.name} · ${hm(b.start)}-${hm(b.end)}`, sub: `Unit ${b.unit.code}${b.guests ? ` · ${b.guests} guest${b.guests === 1 ? "" : "s"}` : ""}` })) }],
+    parking: levels.map(({ L, list }) => ({
+      head: L === "Unassigned" ? `Registered, no slot yet (${list.length})` : `Level ${L}: ${list.length} registered vehicle${list.length === 1 ? "" : "s"}`,
+      rows: list.map((v) => ({ label: `${v.details.match(/slot\s+(B\d-\d+)/i)?.[1] ?? "No slot"} · Unit ${v.unit.code}`, sub: staff ? `${v.name} · ${v.details.split("·")[0].trim()}` : v.details.split("·")[0].trim() })),
+    })),
+    lobby: [], core: [],
+  };
+  const ZONES: { id: TwinZone["id"]; label: string; about: string }[] = [
+    { id: "lobby", label: "Lobbies and entrance", about: "Ground-floor lobby of each tower, guard desk and entrance." },
+    { id: "parking", label: "Parking (B1-B2)", about: "Two basement parking levels under both towers." },
+    { id: "amenity", label: `Pool deck and ${SITE.amenityFloor}th-floor amenities`, about: `Pool deck on the podium, gym and function rooms on the ${SITE.amenityFloor}th floor, kids' play area, helipad on Tower A.` },
+    { id: "core", label: "Elevators and building systems", about: "Two lifts per tower, stairs, risers, pumps and the roof deck." },
   ];
   const zones: TwinZone[] = ZONES.map((z) => {
     const locs = [...byLoc.keys()].filter((k) => !codes.has(k) && (zoneFor(k) ?? "core") === z.id);
     const tickets = locs.flatMap((k) => byLoc.get(k)!).sort((a, b) => b.createdAt - a.createdAt);
     const watch = warnings.find((w) => w.zone === z.id)?.title ?? null;
-    return { ...z, tickets, locations: locs, state: stateOf(tickets, now) ?? (watch ? "watch" : null), watch };
+    return { ...z, tickets, locations: locs, state: stateOf(tickets, now) ?? (watch ? "watch" : null), watch, info: INFO[z.id] };
   });
 
   const all = [...twinUnits.map((u) => u.state), ...zones.map((z) => z.state)];
