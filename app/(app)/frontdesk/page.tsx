@@ -6,7 +6,7 @@ import { fmtDate, fmtTime, nowManila } from "@/lib/format";
 import { checkPass } from "./actions";
 
 export const dynamic = "force-dynamic";
-const KIND: Record<string, string> = { GUEST: "Guest", DELIVERY: "Delivery", CONTRACTOR: "Contractor", MOVE: "Move in/out" };
+const KIND: Record<string, string> = { GUEST: "Guest", DELIVERY: "Delivery", CONTRACTOR: "Contractor", MOVE: "Move in/out", STAY: "Short stay" };
 
 export default async function FrontDesk({ searchParams }: { searchParams: { code?: string; error?: string; ok?: string } }) {
   await requireRole("GUARD", "MANAGER", "ADMIN");

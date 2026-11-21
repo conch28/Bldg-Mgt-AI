@@ -9,7 +9,7 @@ import { nowManila, peso } from "@/lib/format";
 export async function book(fd: FormData) {
   const u = await requireRole("OWNER");
   const p = z.object({ serviceId: z.string(), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), time: z.enum(["09:00", "11:00", "13:00", "15:00"]), qty: z.coerce.number().int().min(1).max(6) }).parse(Object.fromEntries(fd));
-  const [unit, sv] = await Promise.all([prisma.unit.findFirst({ where: { ownerId: u.id } }), prisma.service.findUnique({ where: { id: p.serviceId } })]);
+  const [unit, sv] = await Promise.all([prisma.unit.findFirst({ where: { ownerId: u.id }, orderBy: { code: "asc" } }), prisma.service.findUnique({ where: { id: p.serviceId } })]);
   if (!unit || !sv) throw new Error("Unit or service not found");
   const slot = new Date(`${p.date}T${p.time}:00+08:00`);
   const dow = new Date(`${p.date}T12:00:00+08:00`).getUTCDay();

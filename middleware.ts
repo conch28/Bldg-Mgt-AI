@@ -7,7 +7,9 @@ const RULES: [RegExp, string[]][] = [
   [/^\/(work-orders|collections|comms|maintenance|vendors|reports)/, ["BOARD", "MANAGER", "ADMIN"]],
   [/^\/today/, ["MANAGER", "ADMIN"]],
   [/^\/frontdesk/, ["MANAGER", "ADMIN", "GUARD"]],
-  [/^\/(home|my|chat|services|passes|updates)(\/|$)/, ["OWNER"]],
+  [/^\/listings/, ["BOARD", "MANAGER", "ADMIN"]],
+  [/^\/(moving|registrations|sos)(\/|$)/, ["OWNER", "MANAGER", "ADMIN", "GUARD"]],
+  [/^\/(home|my|chat|services|passes|updates|property)(\/|$)/, ["OWNER"]],
 ];
 
 export default withAuth({
@@ -22,4 +24,4 @@ export default withAuth({
   },
 });
 
-export const config = { matcher: ["/((?!api/auth|api/cron|api/paymongo|login|_next|favicon.ico|robots.txt).*)"] };
+export const config = { matcher: ["/((?!api/auth|api/cron|api/paymongo|login|offline|_next|favicon.ico|robots.txt|manifest.webmanifest|sw.js|icons).*)"] };

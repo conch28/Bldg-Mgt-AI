@@ -48,70 +48,81 @@ model Building {
 }
 
 model User {
-  id           String        @id @default(cuid())
-  email        String        @unique
-  name         String
-  phone        String?
-  passwordHash String
-  role         Role          @default(OWNER)
-  active       Boolean       @default(true)
-  buildingId   String
-  building     Building      @relation(fields: [buildingId], references: [id])
-  units        Unit[]        @relation("UnitOwner")
-  workOrders   WorkOrder[]   @relation("WOReporter")
-  chat         ChatMessage[]
-  bookings     Booking[]
-  audit        AuditLog[]
-  language     String        @default("EN") // EN | TL (Taglish)
-  notifySms    Boolean       @default(true)
-  notifyEmail  Boolean       @default(true)
-  notifyMessenger Boolean    @default(false)
-  messengerPsid String?      // Page-scoped ID, set when the owner links Messenger
-  deliveries   Delivery[]
-  passes       Pass[]
+  id              String           @id @default(cuid())
+  email           String           @unique
+  name            String
+  phone           String?
+  passwordHash    String
+  role            Role             @default(OWNER)
+  active          Boolean          @default(true)
+  buildingId      String
+  building        Building         @relation(fields: [buildingId], references: [id])
+  units           Unit[]           @relation("UnitOwner")
+  workOrders      WorkOrder[]      @relation("WOReporter")
+  chat            ChatMessage[]
+  bookings        Booking[]
+  audit           AuditLog[]
+  language        String           @default("EN") // EN | TL (Taglish)
+  notifySms       Boolean          @default(true)
+  notifyEmail     Boolean          @default(true)
+  notifyMessenger Boolean          @default(false)
+  messengerPsid   String? // Page-scoped ID, set when the owner links Messenger
+  deliveries      Delivery[]
+  passes          Pass[]
   amenityBookings AmenityBooking[]
-  votes        Vote[]
-  pulses       Pulse[]
-  createdAt    DateTime      @default(now())
+  votes           Vote[]
+  pulses          Pulse[]
+  listings        Listing[]
+  moves           MoveRequest[]
+  registrations   Registration[]
+  marketItems     MarketItem[]
+  lostFound       LostFound[]
+  sosAlerts       SosAlert[]
+  createdAt       DateTime         @default(now())
 }
 
 model Unit {
-  id         String      @id @default(cuid())
-  code       String // e.g. 12B
-  floor      Int
-  sqm        Decimal     @db.Decimal(8, 2)
-  buildingId String
-  building   Building    @relation(fields: [buildingId], references: [id])
-  ownerId    String?
-  owner      User?       @relation("UnitOwner", fields: [ownerId], references: [id])
-  ownerName  String? // for units whose owner has no login yet
-  bills      Bill[]
-  workOrders WorkOrder[]
-  bookings   Booking[]
-  passes     Pass[]
+  id              String           @id @default(cuid())
+  code            String // e.g. 12B
+  floor           Int
+  sqm             Decimal          @db.Decimal(8, 2)
+  buildingId      String
+  building        Building         @relation(fields: [buildingId], references: [id])
+  ownerId         String?
+  owner           User?            @relation("UnitOwner", fields: [ownerId], references: [id])
+  ownerName       String? // for units whose owner has no login yet
+  bills           Bill[]
+  workOrders      WorkOrder[]
+  bookings        Booking[]
+  passes          Pass[]
   amenityBookings AmenityBooking[]
-  votes      Vote[]
+  votes           Vote[]
+  listings        Listing[]
+  leases          Lease[]
+  moves           MoveRequest[]
+  utilities       UtilityReading[]
+  registrations   Registration[]
 
   @@unique([buildingId, code])
 }
 
 model WorkOrder {
-  id          String      @id @default(cuid())
-  number      Int         @unique @default(autoincrement())
+  id          String    @id @default(cuid())
+  number      Int       @unique @default(autoincrement())
   unitId      String?
-  unit        Unit?       @relation(fields: [unitId], references: [id])
+  unit        Unit?     @relation(fields: [unitId], references: [id])
   location    String // unit code or common area
   title       String
   description String?
   category    String
-  priority    Priority    @default(MEDIUM)
-  status      WOStatus    @default(NEW)
+  priority    Priority  @default(MEDIUM)
+  status      WOStatus  @default(NEW)
   slaHours    Int
   assignee    String?
-  source      String      @default("Portal")
+  source      String    @default("Portal")
   reporterId  String?
-  reporter    User?       @relation("WOReporter", fields: [reporterId], references: [id])
-  createdAt   DateTime    @default(now())
+  reporter    User?     @relation("WOReporter", fields: [reporterId], references: [id])
+  createdAt   DateTime  @default(now())
   closedAt    DateTime?
   rating      Int?
   events      WOEvent[]
@@ -129,17 +140,17 @@ model WOEvent {
 }
 
 model Bill {
-  id         String     @id @default(cuid())
-  unitId     String
-  unit       Unit       @relation(fields: [unitId], references: [id])
-  period     String // YYYY-MM
-  amount     Decimal    @db.Decimal(12, 2)
-  paid       Decimal    @default(0) @db.Decimal(12, 2)
-  dueDate    DateTime
-  status     BillStatus @default(UNPAID)
-  payments   Payment[]
-  reminders  Reminder[]
-  createdAt  DateTime   @default(now())
+  id        String     @id @default(cuid())
+  unitId    String
+  unit      Unit       @relation(fields: [unitId], references: [id])
+  period    String // YYYY-MM
+  amount    Decimal    @db.Decimal(12, 2)
+  paid      Decimal    @default(0) @db.Decimal(12, 2)
+  dueDate   DateTime
+  status    BillStatus @default(UNPAID)
+  payments  Payment[]
+  reminders Reminder[]
+  createdAt DateTime   @default(now())
 
   @@unique([unitId, period])
   @@index([period, status])
@@ -156,14 +167,14 @@ model Payment {
 }
 
 model Reminder {
-  id        String   @id @default(cuid())
-  billId    String
-  bill      Bill     @relation(fields: [billId], references: [id])
-  channel   String // Viber, SMS, Email
-  tone      String
-  message   String
-  sentBy    String
-  sentAt    DateTime @default(now())
+  id      String   @id @default(cuid())
+  billId  String
+  bill    Bill     @relation(fields: [billId], references: [id])
+  channel String // Viber, SMS, Email
+  tone    String
+  message String
+  sentBy  String
+  sentAt  DateTime @default(now())
 }
 
 model BudgetLine {
@@ -234,7 +245,9 @@ model AuditLog {
   createdAt DateTime @default(now())
 }
 
-/* ---------------- Resident communications ---------------- */
+/**
+ * ---------------- Resident communications ----------------
+ */
 
 enum AnnStatus {
   DRAFT
@@ -285,7 +298,9 @@ model Delivery {
   @@index([userId, channel])
 }
 
-/* ---------------- Amenities ---------------- */
+/**
+ * ---------------- Amenities ----------------
+ */
 
 model Amenity {
   id        String           @id @default(cuid())
@@ -318,7 +333,9 @@ model AmenityBooking {
   @@index([amenityId, start])
 }
 
-/* ---------------- Visitor and delivery passes ---------------- */
+/**
+ * ---------------- Visitor and delivery passes ----------------
+ */
 
 model Pass {
   id         String    @id @default(cuid())
@@ -338,7 +355,9 @@ model Pass {
   createdAt  DateTime  @default(now())
 }
 
-/* ---------------- Documents ---------------- */
+/**
+ * ---------------- Documents ----------------
+ */
 
 model Document {
   id         String   @id @default(cuid())
@@ -353,18 +372,20 @@ model Document {
   createdAt  DateTime @default(now())
 }
 
-/* ---------------- Voting and polls ---------------- */
+/**
+ * ---------------- Voting and polls ----------------
+ */
 
 model Poll {
-  id          String       @id @default(cuid())
-  question    String
-  detail      String?
-  kind        String       @default("POLL") // POLL (one vote per owner) | RESOLUTION (one vote per unit, weighted by sqm)
-  closesAt    DateTime
-  createdBy   String
-  createdAt   DateTime     @default(now())
-  options     PollOption[]
-  votes       Vote[]
+  id        String       @id @default(cuid())
+  question  String
+  detail    String?
+  kind      String       @default("POLL") // POLL (one vote per owner) | RESOLUTION (one vote per unit, weighted by sqm)
+  closesAt  DateTime
+  createdBy String
+  createdAt DateTime     @default(now())
+  options   PollOption[]
+  votes     Vote[]
 }
 
 model PollOption {
@@ -391,7 +412,9 @@ model Vote {
   @@unique([pollId, unitId])
 }
 
-/* ---------------- Vendors and contracts ---------------- */
+/**
+ * ---------------- Vendors and contracts ----------------
+ */
 
 model Vendor {
   id              String    @id @default(cuid())
@@ -409,7 +432,9 @@ model Vendor {
   active          Boolean   @default(true)
 }
 
-/* ---------------- Preventive maintenance ---------------- */
+/**
+ * ---------------- Preventive maintenance ----------------
+ */
 
 model PMTask {
   id            String    @id @default(cuid())
@@ -426,19 +451,169 @@ model PMTask {
 
 /// Resident pulse: a 1-5 rating with an optional comment, after a repair (TICKET) or once a month (MONTHLY).
 model Pulse {
-  id          String    @id @default(cuid())
-  userId      String
-  user        User      @relation(fields: [userId], references: [id])
-  unitCode    String?
-  kind        String // TICKET | MONTHLY | AMENITY
-  score       Int // 1-5
-  comment     String?
-  topic       String? // Repairs, Elevators, Cleanliness, Security, Water, Communication, Amenities, Noise, Staff, Dues, Other
-  sentiment   String? // POSITIVE | NEUTRAL | NEGATIVE
-  workOrder   Int?
-  followedUp  DateTime?
-  followNote  String?
-  createdAt   DateTime  @default(now())
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  unitCode   String?
+  kind       String // TICKET | MONTHLY | AMENITY
+  score      Int // 1-5
+  comment    String?
+  topic      String? // Repairs, Elevators, Cleanliness, Security, Water, Communication, Amenities, Noise, Staff, Dues, Other
+  sentiment  String? // POSITIVE | NEUTRAL | NEGATIVE
+  workOrder  Int?
+  followedUp DateTime?
+  followNote String?
+  createdAt  DateTime  @default(now())
 
   @@index([createdAt])
+}
+
+// ---------- v3: resale & leasing, unit life, community, safety ----------
+model Listing {
+  id            String    @id @default(cuid())
+  unitId        String
+  unit          Unit      @relation(fields: [unitId], references: [id])
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  kind          String // LEASE | SALE
+  status        String    @default("DRAFT") // DRAFT | LIVE | RESERVED | CLOSED | WITHDRAWN
+  price         Decimal   @db.Decimal(14, 2)
+  suggestedLow  Decimal   @db.Decimal(14, 2)
+  suggestedHigh Decimal   @db.Decimal(14, 2)
+  beds          Int
+  furnished     String // BARE | SEMI | FULL
+  title         String
+  body          String
+  bodyTl        String?
+  highlights    String[]
+  rationale     String
+  channels      String[] // FB_PAGE | FB_MARKETPLACE | FB_GROUPS
+  posts         Json?
+  views         Int       @default(0)
+  publishedAt   DateTime?
+  closedAt      DateTime?
+  closedPrice   Decimal?  @db.Decimal(14, 2)
+  broker        String?
+  ai            Boolean   @default(false)
+  inquiries     Inquiry[]
+  createdAt     DateTime  @default(now())
+}
+
+model Inquiry {
+  id        String    @id @default(cuid())
+  listingId String
+  listing   Listing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  name      String
+  channel   String // MESSENGER | MARKETPLACE | GROUP | PAGE
+  message   String
+  aiReply   String?
+  status    String    @default("NEW") // NEW | ANSWERED | VIEWING | OFFER | CLOSED
+  viewingAt DateTime?
+  passCode  String?
+  createdAt DateTime  @default(now())
+}
+
+model MarketComp {
+  id         String   @id @default(cuid())
+  kind       String // LEASE | SALE
+  source     String // SKYLAND_DEAL | SKYLAND_LISTING | NEARBY
+  building   String
+  distanceKm Float
+  sqm        Decimal  @db.Decimal(8, 2)
+  beds       Int
+  floor      Int?
+  furnished  String?
+  price      Decimal  @db.Decimal(14, 2)
+  date       DateTime
+}
+
+model Lease {
+  id         String   @id @default(cuid())
+  unitId     String
+  unit       Unit     @relation(fields: [unitId], references: [id])
+  tenantName String
+  rent       Decimal  @db.Decimal(12, 2)
+  deposit    Decimal  @db.Decimal(12, 2)
+  start      DateTime
+  end        DateTime
+  createdAt  DateTime @default(now())
+}
+
+model MoveRequest {
+  id        String   @id @default(cuid())
+  unitId    String
+  unit      Unit     @relation(fields: [unitId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  kind      String // MOVE_IN | MOVE_OUT | RENOVATION
+  date      DateTime
+  done      String[] // checklist keys completed
+  status    String   @default("PENDING") // PENDING | APPROVED | DONE
+  passCode  String?
+  note      String?
+  createdAt DateTime @default(now())
+}
+
+model UtilityReading {
+  id     String  @id @default(cuid())
+  unitId String
+  unit   Unit    @relation(fields: [unitId], references: [id])
+  period String
+  kind   String // WATER | ELECTRIC
+  usage  Float
+  amount Decimal @db.Decimal(10, 2)
+
+  @@unique([unitId, period, kind])
+}
+
+model Registration {
+  id        String   @id @default(cuid())
+  unitId    String
+  unit      Unit     @relation(fields: [unitId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  kind      String // PET | VEHICLE
+  name      String
+  details   String
+  status    String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  sticker   String?
+  createdAt DateTime @default(now())
+}
+
+model MarketItem {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  title       String
+  category    String
+  price       Decimal? @db.Decimal(12, 2)
+  description String
+  status      String   @default("ACTIVE") // ACTIVE | SOLD | REMOVED
+  createdAt   DateTime @default(now())
+}
+
+model LostFound {
+  id          String   @id @default(cuid())
+  kind        String // LOST | FOUND
+  title       String
+  place       String
+  description String?
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  status      String   @default("OPEN") // OPEN | RETURNED
+  createdAt   DateTime @default(now())
+}
+
+model SosAlert {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  unitCode   String?
+  kind       String // MEDICAL | FIRE | SECURITY | ELEVATOR | OTHER
+  note       String?
+  status     String    @default("OPEN") // OPEN | ACK | RESOLVED
+  ackBy      String?
+  ackAt      DateTime?
+  resolvedAt DateTime?
+  createdAt  DateTime  @default(now())
 }

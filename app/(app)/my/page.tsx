@@ -2,6 +2,8 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHead, Kpi, StatusTag } from "@/components/ui";
+import { LineChart } from "@/components/charts";
+import { monthLabel } from "@/lib/format";
 import SubmitButton from "@/components/SubmitButton";
 import { peso, fmtDate, fmtDateTime, monthLong, nowManila } from "@/lib/format";
 import { paymongoEnabled, testPaymentsAllowed } from "@/lib/payments";
@@ -11,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 export default async function My({ searchParams }: { searchParams: { paid?: string } }) {
   const u = await requireRole("OWNER");
-  const units = await prisma.unit.findMany({ where: { ownerId: u.id } });
+  const units = await prisma.unit.findMany({ where: { ownerId: u.id }, orderBy: { code: "asc" } });
   const ids = units.map((x) => x.id);
   const [bills, payments, wos, bookings] = await Promise.all([
     prisma.bill.findMany({ where: { unitId: { in: ids } }, orderBy: { period: "desc" }, take: 6 }),
@@ -19,6 +21,13 @@ export default async function My({ searchParams }: { searchParams: { paid?: stri
     prisma.workOrder.findMany({ where: { OR: [{ reporterId: u.id }, { unitId: { in: ids } }] }, orderBy: { createdAt: "desc" }, take: 8 }),
     prisma.booking.findMany({ where: { userId: u.id }, orderBy: { slot: "desc" }, take: 5, include: { service: true } }),
   ]);
+  const util = await prisma.utilityReading.findMany({ where: { unitId: ids[0] }, orderBy: { period: "asc" } });
+  const series = (k: string) => util.filter((x) => x.kind === k).slice(-6);
+  const elec = series("ELECTRIC"), water = series("WATER");
+  const lastOf = (a: typeof util) => a[a.length - 1];
+  const avgOf = (a: typeof util) => a.slice(0, -1).reduce((s, x) => s + x.usage, 0) / Math.max(1, a.length - 1);
+  const waterJump = water.length > 2 ? lastOf(water).usage / avgOf(water) - 1 : 0;
+  const elecJump = elec.length > 2 ? lastOf(elec).usage / avgOf(elec) - 1 : 0;
   const unpaid = bills.filter((b) => b.status !== "PAID");
   const due = unpaid.reduce((s, b) => s + Number(b.amount) - Number(b.paid), 0);
   const overdue = unpaid.some((b) => b.dueDate < nowManila());
@@ -26,7 +35,7 @@ export default async function My({ searchParams }: { searchParams: { paid?: stri
   if (!units.length) return (<><PageHead title="My unit" /><main className="view"><div className="card">No unit is linked to your account yet. Please contact the admin office.</div></main></>);
   return (
     <>
-      <PageHead title={`Unit ${units.map((x) => x.code).join(", ")}`} sub={`Hi ${u.name.split(" ")[0]}! ${Number(units[0].sqm)} sqm · Skyland Tower`} />
+      <PageHead title="Bills & dues" sub={`Hi ${u.name.split(" ")[0]}! ${Number(units[0].sqm)} sqm · Skyland Tower`} />
       <main className="view">
         {searchParams.paid && <div className="okmsg">Payment received. Thank you! Your receipt is in Payments below.</div>}
         <div className="grid g3">
@@ -57,6 +66,17 @@ export default async function My({ searchParams }: { searchParams: { paid?: stri
             <div className="list">{payments.map((p) => <div className="li" key={p.id}><div style={{ flex: 1 }}>{peso(p.amount)} for {monthLong(p.bill.period)} via {p.method}<div className="hint mono">{p.reference} · {fmtDate(p.createdAt)}</div></div></div>)}</div>
           </div>
         </div>
+        {elec.length > 0 && <div className="card">
+          <div className="cardhead"><div><h3>Utilities · {units[0].code}</h3><div className="hint">Read from the sub-meters every month</div></div></div>
+          <div className="mini-row">
+            <div className="mini"><b className="n num">{peso(lastOf(elec).amount)}</b><span>electricity<br />{lastOf(elec).usage.toFixed(0)} kWh</span></div>
+            <div className="mini"><b className={"n num" + (waterJump > 0.25 ? " amber" : "")}>{peso(lastOf(water).amount)}</b><span>water<br />{lastOf(water).usage.toFixed(1)} m³</span></div>
+          </div>
+          <div style={{ marginTop: 10 }}><LineChart vals={elec.map((x) => Math.round(x.usage))} labels={elec.map((x) => monthLabel(x.period))} min={0} max={Math.ceil(Math.max(...elec.map((x) => x.usage)) / 50) * 50 + 50} fmt={(v) => `${Math.round(v)}`} h={160} /></div>
+          <div className="hint" style={{ textAlign: "center" }}>Electricity, kWh per month</div>
+          {waterJump > 0.25 ? <div className="aibox" style={{ marginTop: 10 }}><span className="ai-badge">AI noticed</span><div style={{ marginTop: 4 }}>Water use is up {Math.round(waterJump * 100)}% versus your usual. That's often a running toilet or a dripping faucet. <Link href="/chat" style={{ color: "var(--accent)", fontWeight: 600 }}>Ask for a free check →</Link></div></div>
+            : elecJump > 0.2 ? <div className="aibox" style={{ marginTop: 10 }}><span className="ai-badge">AI noticed</span><div style={{ marginTop: 4 }}>Electricity is up {Math.round(elecJump * 100)}% versus your usual. An aircon cleaning often brings it down. <Link href="/services" style={{ color: "var(--accent)", fontWeight: 600 }}>Book one →</Link></div></div> : null}
+        </div>}
         {bookings.length > 0 && <div className="card"><h3>My bookings</h3><div className="list">{bookings.map((b) => <div className="li" key={b.id}><StatusTag s={b.status} /><div>{b.service.name}{b.qty > 1 ? ` × ${b.qty}` : ""} · {fmtDateTime(b.slot)} · {peso(b.total)} ({b.payMethod})</div></div>)}</div></div>}
       </main>
     </>

@@ -26,3 +26,17 @@ export function Bars({ a, b, labels, max, w = 560, h = 200 }: { a: number[]; b: 
     </svg>
   );
 }
+/** Simple single-series bars (can go negative). Used for owner rental income. */
+export function NetBars({ vals, labels, fmt, w = 560, h = 190 }: { vals: number[]; labels: string[]; fmt: (v: number) => string; w?: number; h?: number }) {
+  const pl = 46, pr = 8, pt = 14, pb = 24, iw = w - pl - pr, ih = h - pt - pb;
+  const max = Math.max(1, ...vals), min = Math.min(0, ...vals), span = max - min;
+  const y = (v: number) => pt + ih - ((v - min) / span) * ih, bw = iw / Math.max(1, vals.length);
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" role="img" aria-label="Net rental income by month">
+      {[0, 0.5, 1].map((f) => { const v = min + span * f; return <g key={f}><line className="grid-l" x1={pl} x2={w - pr} y1={y(v)} y2={y(v)} /><text x={pl - 6} y={y(v) + 4} textAnchor="end">{fmt(v)}</text></g>; })}
+      {vals.map((v, i) => { const x0 = pl + i * bw + bw * 0.18, ww = bw * 0.64, top = Math.min(y(v), y(0)), hh = Math.max(2, Math.abs(y(v) - y(0)));
+        return <g key={i}><rect x={x0} y={top} width={ww} height={hh} rx="3" fill={v > 0 ? "var(--accent)" : "var(--bad)"} opacity={v > 0 ? 1 : 0.8} />
+          <text x={pl + i * bw + bw / 2} y={h - 6} textAnchor="middle">{labels[i]}</text></g>; })}
+    </svg>
+  );
+}

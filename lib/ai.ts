@@ -298,3 +298,4 @@ export async function classifyFeedback(comment: string | null | undefined, score
     return (res.parsed_output as z.infer<typeof Feedback>) ?? local;
   } catch { return local; }
 }
+export const anthropicClient = () => client();

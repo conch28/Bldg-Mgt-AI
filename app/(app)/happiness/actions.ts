@@ -10,7 +10,7 @@ import { notifyUser } from "@/lib/comms";
 export async function submitPulse(fd: FormData) {
   const u = await requireRole("OWNER");
   const p = z.object({ score: z.coerce.number().int().min(1).max(5), comment: z.string().max(1000).optional(), back: z.string().optional() }).parse(Object.fromEntries(fd));
-  const unit = await prisma.unit.findFirst({ where: { ownerId: u.id } });
+  const unit = await prisma.unit.findFirst({ where: { ownerId: u.id }, orderBy: { code: "asc" } });
   await recordPulse({ userId: u.id, unitCode: unit?.code, kind: "MONTHLY", score: p.score, comment: p.comment });
   revalidatePath("/home");
   redirect((p.back === "/updates" ? "/updates" : "/home") + "?thanks=" + p.score);

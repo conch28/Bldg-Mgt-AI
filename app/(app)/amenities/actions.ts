@@ -12,7 +12,7 @@ const fail = (m: string) => redirect("/amenities?error=" + encodeURIComponent(m)
 export async function bookAmenity(fd: FormData) {
   const u = await requireRole("OWNER");
   const p = z.object({ amenityId: z.string(), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), hour: z.coerce.number().int().min(0).max(23), guests: z.coerce.number().int().min(0).max(80) }).parse(Object.fromEntries(fd));
-  const [unit, a] = await Promise.all([prisma.unit.findFirst({ where: { ownerId: u.id } }), prisma.amenity.findUnique({ where: { id: p.amenityId } })]);
+  const [unit, a] = await Promise.all([prisma.unit.findFirst({ where: { ownerId: u.id }, orderBy: { code: "asc" } }), prisma.amenity.findUnique({ where: { id: p.amenityId } })]);
   if (!unit || !a) return fail("Unit or amenity not found.");
   const start = new Date(`${p.date}T${String(p.hour).padStart(2, "0")}:00:00+08:00`);
   const end = new Date(start.getTime() + a.slotHours * 3600000);

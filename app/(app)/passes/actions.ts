@@ -12,12 +12,13 @@ const newCode = () => Array.from({ length: 6 }, () => ALPHA[randomInt(ALPHA.leng
 
 export async function createPass(fd: FormData) {
   const u = await requireRole("OWNER");
-  const p = z.object({ kind: z.enum(["GUEST", "DELIVERY", "CONTRACTOR", "MOVE"]), name: z.string().trim().min(2).max(80), plate: z.string().trim().max(12).optional(), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), days: z.coerce.number().int().min(1).max(7), note: z.string().max(200).optional() }).safeParse(Object.fromEntries(fd));
+  const p = z.object({ kind: z.enum(["GUEST", "DELIVERY", "CONTRACTOR", "MOVE", "STAY"]), name: z.string().trim().min(2).max(80), plate: z.string().trim().max(12).optional(), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), days: z.coerce.number().int().min(1).max(30), note: z.string().max(200).optional() }).safeParse(Object.fromEntries(fd));
   if (!p.success) redirect("/passes?error=" + encodeURIComponent("Add the visitor's name and a date."));
-  const unit = await prisma.unit.findFirst({ where: { ownerId: u.id } });
+  const unit = await prisma.unit.findFirst({ where: { ownerId: u.id }, orderBy: { code: "asc" } });
   if (!unit) redirect("/passes?error=No+unit+linked");
   const validFrom = new Date(`${p.data.date}T00:00:00+08:00`);
   if (validFrom.getTime() < nowManila().getTime() - 86400000) redirect("/passes?error=" + encodeURIComponent("Pick today or a future date."));
+  if (p.data.kind === "STAY" && (validFrom.getTime() - nowManila().getTime() < 86400000 - 12 * 3600000 || p.data.days < 2)) redirect("/passes?error=" + encodeURIComponent("Short stays need 2 nights or more, registered at least a day ahead."));
   let code = newCode();
   while (await prisma.pass.findUnique({ where: { code } })) code = newCode();
   const pass = await prisma.pass.create({ data: { code, kind: p.data.kind, name: p.data.name, plate: p.data.plate?.toUpperCase() || null, unitId: unit.id, userId: u.id, validFrom, validTo: new Date(validFrom.getTime() + p.data.days * 86400000 - 1), note: p.data.note || null } });

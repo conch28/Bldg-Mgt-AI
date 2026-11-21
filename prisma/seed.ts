@@ -7,6 +7,7 @@
 import { PrismaClient, Priority, WOStatus, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { seedV2 } from "./seed-v2";
+import { seedV3 } from "./seed-v3";
 
 const prisma = new PrismaClient();
 
@@ -41,7 +42,7 @@ async function main() {
     throw new Error("Refusing to seed a production database. Set SEED_ALLOW_PRODUCTION=1 to override.");
   }
   // Demo deploys re-seed only when the sample data is missing or from an older version of the app.
-  const SEED_VERSION = "skyland-demo-v3";
+  const SEED_VERSION = "skyland-demo-v4";
   if (process.env.SEED_IF_EMPTY === "1" && (await prisma.building.count()) > 0) {
     const current = await prisma.auditLog.findFirst({ where: { action: "seed", detail: { contains: SEED_VERSION } } });
     if (current) { console.log("Demo data is up to date. Skipping the seed."); return; }
@@ -49,6 +50,8 @@ async function main() {
   }
   console.log("Clearing data…");
   await prisma.$transaction([
+    prisma.inquiry.deleteMany(), prisma.listing.deleteMany(), prisma.marketComp.deleteMany(), prisma.lease.deleteMany(), prisma.moveRequest.deleteMany(),
+    prisma.utilityReading.deleteMany(), prisma.registration.deleteMany(), prisma.marketItem.deleteMany(), prisma.lostFound.deleteMany(), prisma.sosAlert.deleteMany(),
     prisma.pulse.deleteMany(), prisma.delivery.deleteMany(), prisma.announcement.deleteMany(), prisma.amenityBooking.deleteMany(), prisma.amenity.deleteMany(),
     prisma.pass.deleteMany(), prisma.document.deleteMany(), prisma.vote.deleteMany(), prisma.pollOption.deleteMany(), prisma.poll.deleteMany(),
     prisma.vendor.deleteMany(), prisma.pMTask.deleteMany(),
@@ -195,8 +198,9 @@ async function main() {
   ] });
 
   await seedV2({ prisma, rnd, hash, buildingId: building.id, units, owner, manager, NOW });
+  await seedV3({ prisma, rnd, units: await prisma.unit.findMany({ orderBy: [{ floor: "asc" }, { code: "asc" }] }), owner, manager, NOW });
 
-  await prisma.auditLog.create({ data: { userId: admin.id, action: "seed", detail: "Database seeded with Skyland sample data (skyland-demo-v3)" } });
+  await prisma.auditLog.create({ data: { userId: admin.id, action: "seed", detail: "Database seeded with Skyland sample data (skyland-demo-v4)" } });
   console.log(`Done. ${units.length} units, ${bills.length} bills, ${payments.length} payments.`);
   console.log(`Logins (password: ${password}): admin@ manager@ president@ treasurer@ owner@ guard@ skyland.test`);
   void manager; void president; void treasurer;

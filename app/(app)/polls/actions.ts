@@ -12,7 +12,7 @@ export async function vote(fd: FormData) {
   const opt = poll?.options.find((o) => o.id === fd.get("optionId"));
   if (!poll || !opt) redirect("/polls?error=" + encodeURIComponent("Pick an option."));
   if (poll.closesAt < nowManila()) redirect("/polls?error=" + encodeURIComponent("Voting has closed."));
-  const units = await prisma.unit.findMany({ where: { ownerId: u.id } });
+  const units = await prisma.unit.findMany({ where: { ownerId: u.id }, orderBy: { code: "asc" } });
   if (!units.length) redirect("/polls?error=No+unit+linked");
   // Resolutions: one vote per unit, weighted by floor area (per the master deed). Polls: one vote per unit, weight 1.
   const behind = await prisma.bill.count({ where: { unitId: { in: units.map((x) => x.id) }, status: { not: "PAID" }, dueDate: { lt: new Date(nowManila().getTime() - 60 * 86400000) } } });
