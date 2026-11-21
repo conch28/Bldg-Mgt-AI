@@ -82,7 +82,7 @@ export default async function Today() {
         <BuildingTwin data={twin} staff weather={weather} />
         <div className="grid g-7-5">
           <div className="stack">
-          <div className="card"><h3>Your list</h3>
+          <div className="card" data-tour="list"><h3>Your list</h3>
             {todos.map((t) => (
               <div className="todo" key={t.t}><div className={"n " + t.cls}>{t.n}</div>
                 <div style={{ minWidth: 0 }}><b>{t.t}</b><div className="hint" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.d}</div></div>

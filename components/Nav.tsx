@@ -79,7 +79,7 @@ export default function Nav({ items, tabs, user, building }: { items: NavItem[];
 
       {more && (
         <div className="sheet-wrap" onClick={() => setMore(false)}>
-          <div className="sheet" id="more-sheet" role="dialog" aria-label="All pages" onClick={(e) => e.stopPropagation()}>
+          <div className="sheet" id="more-sheet" role="dialog" aria-label="All pages" onClick={(e) => { e.stopPropagation(); if ((e.target as HTMLElement).closest("a")) setMore(false); }}>
             <div className="sheet-grip" />
             {list}
             <div className="sheet-foot">
