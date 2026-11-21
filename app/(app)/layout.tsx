@@ -1,7 +1,9 @@
 import Link from "next/link";
 import Nav, { type NavItem, type Tab } from "@/components/Nav";
 import Providers from "../providers";
-import { requireRole } from "@/lib/auth";
+import { requireRole, homeFor } from "@/lib/auth";
+import { Suspense } from "react";
+import Tour from "@/components/Tour";
 import { prisma } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { demoMode } from "@/lib/env";
@@ -88,6 +90,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const toSign = u.role === "BOARD" || isMgr ? await prisma.purchaseRequest.count({ where: { status: "PENDING", requestedBy: { not: u.id } } }) : u.role === "GUARD" ? await prisma.purchaseRequest.count({ where: { status: "ORDERED" } }) : 0;
   const counts: Record<string, number> = { "/comms": pending, "/work-orders": escalated, "/updates": unread, "/today": pending + escalated + risk, "/happiness": risk, "/sos": sos, "/property": inquiries, "/procurement": toSign };
   const items = ALL.filter((i) => i.roles.includes(u.role)).map(({ roles, ...i }) => ({ ...i, count: counts[i.href] || 0 }));
+  items.push({ href: `${homeFor(u.role)}?tour=1`, label: "App tour", group: "Help", icon: "spark", count: 0 });
   const tabs = (TABS[u.role] ?? []).map((t) => ({ ...t, count: counts[t.href] || 0 }));
   return (
     <Providers>
@@ -98,6 +101,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {isStaff && sos > 0 && <Link href="/sos" className="sos-banner" role="alert"><b>SOS</b> {sos} emergency alert{sos > 1 ? "s" : ""} need{sos > 1 ? "" : "s"} a response now. Tap to open.</Link>}
           {children}
         </div>
+        <Suspense fallback={null}><Tour uid={u.id} role={u.role} /></Suspense>
       </div>
     </Providers>
   );

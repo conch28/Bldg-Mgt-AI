@@ -30,7 +30,7 @@ export default async function FrontDesk({ searchParams }: { searchParams: { code
         {searchParams.error && <div className="err">{searchParams.error}</div>}
         {searchParams.ok && <div className="okmsg">{searchParams.ok === "in" ? "Checked in. The owner has been notified." : "Checked out."}</div>}
         <div className="grid g-7-5">
-          <div className="card">
+          <div className="card" data-tour="check">
             <h3>Check a pass</h3>
             <form action={checkPass} className="codebox" style={{ marginTop: 10 }}>
               <input name="code" defaultValue={searchParams.code ?? ""} placeholder="K7Q2MX" autoComplete="off" autoCapitalize="characters" inputMode="text" maxLength={6} aria-label="Pass code" className="pass-code" />
@@ -62,7 +62,7 @@ export default async function FrontDesk({ searchParams }: { searchParams: { code
           </div>
         </div>
         <div className="grid g2">
-          <div className="card"><h3>Expected visitors</h3>
+          <div className="card" data-tour="expected"><h3>Expected visitors</h3>
             <div className="list" style={{ marginTop: 6 }}>{expected.length ? expected.map((p) => <div className="li" key={p.id}><span className="tag t-mut">{KIND[p.kind]}</span><div style={{ flex: 1 }}>{p.name} → <b>{p.unit.code}</b>{p.plate ? ` · ${p.plate}` : ""}</div><a className="btn sm" href={`/frontdesk?code=${p.code}`}>{p.code}</a></div>) : <div className="empty">No one expected.</div>}</div>
           </div>
           <div className="card"><h3>Inside the building</h3>
