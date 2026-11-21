@@ -863,19 +863,20 @@ model MeterReading {
  */
 
 model Asset {
-  id            String        @id @default(cuid())
-  tag           String        @unique // printed on the fixture, e.g. LT-B12-HALL-2
+  id            String          @id @default(cuid())
+  tag           String          @unique // printed on the fixture, e.g. LT-B12-HALL-2
   name          String
   category      String // Lighting | Aircon | Pump | Elevator | Electrical | Plumbing | Safety | Fixture
   location      String // common area or unit code, same wording as work orders
   installedAt   DateTime
   lifeMonths    Int // expected life
   warrantyUntil DateTime?
-  cost          Decimal       @db.Decimal(12, 2)
+  cost          Decimal         @db.Decimal(12, 2)
   vendor        String?
-  status        String        @default("OK") // OK | FAULTY | RETIRED
+  status        String          @default("OK") // OK | FAULTY | RETIRED
   replacements  Replacement[]
-  createdAt     DateTime      @default(now())
+  sensors       SensorReading[]
+  createdAt     DateTime        @default(now())
 }
 
 model StockItem {
@@ -970,4 +971,18 @@ model Quote {
   note      String?
   addedBy   String
   createdAt DateTime        @default(now())
+}
+
+/**
+ * IoT readings from elevator and genset sensors (vibration, door faults, battery, temperature, run hours).
+ */
+model SensorReading {
+  id      String   @id @default(cuid())
+  assetId String
+  asset   Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  metric  String // VIBRATION (mm/s) | DOOR_FAULTS (per day) | BATTERY_V | COOLANT_C | RUN_HOURS | TRIPS (per day)
+  value   Float
+  at      DateTime @default(now())
+
+  @@index([assetId, metric, at])
 }

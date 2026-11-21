@@ -381,6 +381,7 @@ export async function writeAdvice(facts: string, fallback: string): Promise<{ te
     const text = (res.content as any[]).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
     return text ? { text, ai: true } : { text: fallback, ai: false };
   } catch { return { text: fallback, ai: false }; }
+}
 
 // ---------- Generic writer for board documents (agenda, minutes, advisories) ----------
 /** One-shot writing task. Uses only the facts given; returns the fallback when there is no key or the call fails. */

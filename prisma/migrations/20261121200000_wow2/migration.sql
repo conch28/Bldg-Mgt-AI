@@ -147,6 +147,17 @@ CREATE TABLE "EventRsvp" (
     CONSTRAINT "EventRsvp_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "SensorReading" (
+    "id" TEXT NOT NULL,
+    "assetId" TEXT NOT NULL,
+    "metric" TEXT NOT NULL,
+    "value" DOUBLE PRECISION NOT NULL,
+    "at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "SensorReading_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "Proxy_meetingId_unitId_key" ON "Proxy"("meetingId", "unitId");
 
@@ -161,6 +172,9 @@ CREATE UNIQUE INDEX "PostLike_postId_userId_key" ON "PostLike"("postId", "userId
 
 -- CreateIndex
 CREATE UNIQUE INDEX "EventRsvp_eventId_userId_key" ON "EventRsvp"("eventId", "userId");
+
+-- CreateIndex
+CREATE INDEX "SensorReading_assetId_metric_at_idx" ON "SensorReading"("assetId", "metric", "at");
 
 -- AddForeignKey
 ALTER TABLE "ActionItem" ADD CONSTRAINT "ActionItem_meetingId_fkey" FOREIGN KEY ("meetingId") REFERENCES "Meeting"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -179,3 +193,6 @@ ALTER TABLE "PostLike" ADD CONSTRAINT "PostLike_postId_fkey" FOREIGN KEY ("postI
 
 -- AddForeignKey
 ALTER TABLE "EventRsvp" ADD CONSTRAINT "EventRsvp_eventId_fkey" FOREIGN KEY ("eventId") REFERENCES "Event"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SensorReading" ADD CONSTRAINT "SensorReading_assetId_fkey" FOREIGN KEY ("assetId") REFERENCES "Asset"("id") ON DELETE CASCADE ON UPDATE CASCADE;

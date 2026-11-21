@@ -85,10 +85,10 @@ export async function draftMinutes(meeting: { title: string; kind: string; start
     `# Minutes: ${meeting.title}`, `${fmtDate(meeting.startsAt)} · ${present}`, "",
     "## Discussion", ...notes.split("\n").filter((l) => l.trim() && !/^(?:[-*]\s*)?(action|todo|to do|gagawin)\s*[:\-]/i.test(l.trim())).map((l) => `- ${l.replace(/^[-*]\s*/, "")}`),
     "", "## Action items", ...(actions.length ? actions.map((a) => `- **${a.owner}:** ${a.text}${a.due ? ` (by ${fmtDate(a.due)})` : ""}`) : ["- None recorded."]),
-    "", "_Draft for the corporate secretary to review before circulation._",
+    "", "Draft for the corporate secretary to review before circulation.",
   ].join("\n");
   const r = await writeDoc(
-    "You are the corporate secretary's assistant for a Philippine condominium corporation. Turn rough meeting notes (English, Tagalog or Taglish) into formal minutes in English Markdown: title, date and attendance line, then one ## section per agenda item with what was discussed and any motion, who moved and seconded, and the result if the notes say so. End with an '## Action items' list (owner, task, due date). Mark anything unclear as [to confirm]. End with: _Draft for the corporate secretary to review before circulation._",
+    "You are the corporate secretary's assistant for a Philippine condominium corporation. Turn rough meeting notes (English, Tagalog or Taglish) into formal minutes in English Markdown: title, date and attendance line, then one ## section per agenda item with what was discussed and any motion, who moved and seconded, and the result if the notes say so. End with an '## Action items' list (owner, task, due date). Mark anything unclear as [to confirm]. End with: Draft for the corporate secretary to review before circulation.",
     `Meeting: ${meeting.title}, ${fmtDate(meeting.startsAt)}. Attendance: ${present}.\nAgenda:\n${meeting.agenda ?? "(none)"}\n\nNotes:\n${notes}`,
     fallback,
   );

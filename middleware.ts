@@ -7,6 +7,7 @@ const RULES: [RegExp, string[]][] = [
   [/^\/(work-orders|collections|comms|maintenance|vendors|reports)/, ["BOARD", "MANAGER", "ADMIN"]],
   [/^\/today/, ["MANAGER", "ADMIN"]],
   [/^\/(energy|meetings|equipment|channels)(\/|$)/, ["BOARD", "MANAGER", "ADMIN"]],
+  [/^\/neighbors(\/|$)/, ["OWNER", "BOARD", "MANAGER", "ADMIN"]],
   [/^\/frontdesk/, ["MANAGER", "ADMIN", "GUARD"]],
   [/^\/listings/, ["BOARD", "MANAGER", "ADMIN"]],
   [/^\/(moving|registrations|sos)(\/|$)/, ["OWNER", "MANAGER", "ADMIN", "GUARD"]],
