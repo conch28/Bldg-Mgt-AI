@@ -5,6 +5,7 @@ import { PageHead, StatusTag } from "@/components/ui";
 import { overdueAccounts, slaStats } from "@/lib/metrics";
 import { sendDueScheduled } from "@/lib/comms";
 import { HappinessHero } from "@/components/Happiness";
+import Tip from "@/components/Tip";
 import { atRiskResidents } from "@/lib/happiness";
 import { peso, fmtDate, fmtTime, nowManila } from "@/lib/format";
 
@@ -53,9 +54,9 @@ export default async function Today() {
   return (
     <>
       <PageHead title={`Today, ${now.toLocaleDateString("en-PH", { timeZone: "Asia/Manila", weekday: "long", month: "long", day: "numeric" })}`}
-        sub={`Hi ${u.name.split(" ").slice(-2, -1)[0] ?? u.name}. ${done} of ${todos.length} areas are clear. Start at the top.`} />
+        sub={`${done} of ${todos.length} clear. Start at the top.`} />
       <main className="view">
-        <HappinessHero />
+        <Tip id="mgr-today" title="Work top to bottom.">Each row is one kind of task, most urgent first. When a row says Clear, you're done with it. AI already drafted replies, updates and reminders for you to approve.</Tip>
         <div className="grid g-7-5">
           <div className="card"><h3>Your list</h3>
             {todos.map((t) => (
@@ -64,6 +65,7 @@ export default async function Today() {
                 {t.n > 0 ? <Link href={t.href} className="btn sm pri">{t.cta}</Link> : <span className="tag t-ok" style={{ marginLeft: "auto" }}>Clear</span>}</div>))}
           </div>
           <div className="stack">
+            <HappinessHero compact />
             <div className="card"><h3>Pulse</h3>
               <div className="list" style={{ marginTop: 6 }}>
                 <div className="li"><span className="tag t-acc">Tickets</span><div>{open.length} open · {sla.pct.toFixed(0)}% closed on time (30 days)</div></div>
@@ -71,13 +73,13 @@ export default async function Today() {
                 <div className="li"><span className="tag t-mut">Satisfaction</span><div>{sla.rating ? sla.rating.toFixed(1) + "★ from " + sla.ratedCount + " ratings" : "No ratings yet"}</div></div>
               </div>
             </div>
-            <div className="card"><h3>In the building today</h3>
+            <details className="card more"><summary><h3 style={{ display: "inline" }}>In the building today</h3><span className="hint" style={{ marginLeft: 8 }}>{amen.length + passes.length}</span></summary>
               <div className="list" style={{ marginTop: 6 }}>
                 {amen.map((b) => <div className="li" key={b.id}><span className="tag t-acc">{fmtTime(b.start)}</span><div>{b.amenity.name} · Unit {b.unit.code}{b.guests ? ` · ${b.guests} guests` : ""}</div></div>)}
                 {passes.map((p) => <div className="li" key={p.id}><span className="tag t-mut">{p.kind.toLowerCase()}</span><div>{p.name} → {p.unit.code}{p.checkedIn ? " · arrived" : ""}</div></div>)}
                 {!amen.length && !passes.length && <div className="hint">No bookings or expected visitors today.</div>}
               </div>
-            </div>
+            </details>
             <div className="card"><h3>Oldest open tickets</h3>
               <div className="list" style={{ marginTop: 6 }}>{open.slice(0, 4).map((w) => <div className="li" key={w.id}><StatusTag s={w.status} /><div>WO-{w.number} · {w.title}<div className="hint">{w.location} · since {fmtDate(w.createdAt)}</div></div></div>)}</div>
             </div>

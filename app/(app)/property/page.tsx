@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import Tip from "@/components/Tip";
 import { PageHead } from "@/components/ui";
 import { Icon } from "@/components/Nav";
 import { NetBars } from "@/components/charts";
@@ -34,6 +35,7 @@ export default async function Property() {
     <>
       <PageHead title="My unit" sub="Rent it out, sell it, or see how much it earns. We do the work, you approve with one tap." />
       <main className="view">
+        <Tip id="owner-property" title="Earn more from your unit, with less work.">Tap "Rent it out" or "Sell it". AI suggests the price and writes the post; nothing goes online until you approve it.</Tip>
         <div className="stack">{units.map((x) => {
           const lease = x.leases.find((l) => l.end >= now); const days = lease ? Math.ceil((lease.end.getTime() - now.getTime()) / 86400000) : 0;
           return (

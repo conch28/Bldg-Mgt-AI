@@ -17,7 +17,7 @@ export default function ReminderPanel({ rows, canSend }: { rows: Row[]; canSend:
     <div className="grid g-7-5">
       <div className="card">
         <div className="cardhead"><div><h3>Overdue accounts</h3><div className="hint">The AI picks the tone by how late the account is. Nothing is sent until you press Send.</div></div></div>
-        <div className="tablewrap"><table>
+        <div className="tablewrap"><table className="stack-m">
           <thead><tr><th>Unit</th><th>Owner</th><th className="r">Days late</th><th className="r">Balance</th><th>Stage</th><th /></tr></thead>
           <tbody>{rows.map((r) => { const [st, cls] = STAGE(r.days); return (
             <tr key={r.unitId}><td className="mono">{r.code}</td><td>{r.owner}</td>

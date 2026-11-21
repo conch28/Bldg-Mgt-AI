@@ -27,7 +27,7 @@ export default async function Listings() {
           <Kpi k="Average days to close" v={avgDays} d={<span className="hint">since posting</span>} />
         </div>
         <div className="card"><h3>Active listings</h3>
-          <div className="tablewrap"><table><thead><tr><th>Unit</th><th>Type</th><th className="r">Price</th><th>Status</th><th className="r">Inquiries</th><th className="hide-m">Viewings</th><th className="hide-m">Listed</th></tr></thead>
+          <div className="tablewrap"><table className="stack-m"><thead><tr><th>Unit</th><th>Type</th><th className="r">Price</th><th>Status</th><th className="r">Inquiries</th><th className="hide-m">Viewings</th><th className="hide-m">Listed</th></tr></thead>
             <tbody>{listings.map((l) => <tr key={l.id}><td><b>{l.unit.code}</b></td><td>{l.kind === "LEASE" ? "Lease" : "Sale"}</td><td className="r num">{peso(l.price)}{l.kind === "LEASE" ? "/mo" : ""}</td>
               <td><span className={"tag " + ST[l.status]}>{l.status.toLowerCase()}</span></td><td className="r">{l.inquiries.length}</td><td className="hide-m">{l.inquiries.filter((i) => i.viewingAt).length}</td><td className="hide-m">{fmtDate(l.createdAt)}</td></tr>)}</tbody></table></div>
         </div>

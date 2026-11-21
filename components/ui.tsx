@@ -1,7 +1,8 @@
-export function PageHead({ title, sub, right }: { title: string; sub?: string; right?: React.ReactNode }) {
+export function PageHead({ title, sub, right, back }: { title: string; sub?: string; right?: React.ReactNode; back?: string }) {
   return (
     <header className="top">
-      <div><h1>{title}</h1>{sub && <div className="sub">{sub}</div>}</div>
+      {back && <a href={back} className="back" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg></a>}
+      <div style={{ minWidth: 0, flex: 1 }}><h1>{title}</h1>{sub && <div className="sub">{sub}</div>}</div>
       <div className="right">{right}</div>
     </header>
   );

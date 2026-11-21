@@ -24,7 +24,7 @@ export default async function ListingPage({ params, searchParams }: { params: { 
   const viewings = l.inquiries.filter((i) => i.viewingAt);
   return (
     <>
-      <PageHead title={`Unit ${l.unit.code} for ${l.kind === "LEASE" ? "lease" : "sale"}`} sub={`${peso(l.price)}${per} · AI suggested ${peso(l.suggestedLow)} – ${peso(l.suggestedHigh)}`} right={<Link href="/property" className="btn sm">Back</Link>} />
+      <PageHead title={`Unit ${l.unit.code} for ${l.kind === "LEASE" ? "lease" : "sale"}`} sub={`${peso(l.price)}${per} · AI suggested ${peso(l.suggestedLow)} – ${peso(l.suggestedHigh)}`} back="/property" />
       <main className="view">
         {searchParams.published && <div className="okmsg">Done! Your listing is live. The AI assistant will answer inquiries and book viewings for you.</div>}
         <div className="steps" aria-label="Progress">{steps.map((s, i) => <span key={s} className={i < stage ? "done" : i === stage ? "now" : ""}>{s}</span>)}</div>

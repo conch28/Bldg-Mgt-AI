@@ -25,14 +25,16 @@ export default async function NewListing({ searchParams }: { searchParams: { uni
 
   return (
     <>
-      <PageHead title={kind === "LEASE" ? "Rent out your unit" : "Sell your unit"} sub="Step 1 of 2 · AI price check" right={<Link href="/property" className="btn sm">Cancel</Link>} />
+      <PageHead title={kind === "LEASE" ? "Rent out your unit" : "Sell your unit"} sub="Step 1 of 2 · AI checks the price" back="/property" />
       <main className="view">
         {searchParams.error && <div className="err">{searchParams.error}</div>}
         <div className="card stack">
           {units.length > 1 && <div className="tabs">{units.map((x) => <Link key={x.id} href={`?unit=${x.id}&kind=${kind}`} className={"chip" + (x.id === unit.id ? " on" : "")}>Unit {x.code}</Link>)}</div>}
           <div className="tabs"><Link href={q({ kind: "LEASE" })} className={"chip" + (kind === "LEASE" ? " on" : "")}>Rent out</Link><Link href={q({ kind: "SALE" })} className={"chip" + (kind === "SALE" ? " on" : "")}>Sell</Link></div>
+          <details className="more"><summary>{beds === 0 ? "Studio" : `${beds} bedroom${beds > 1 ? "s" : ""}`} · {FURNISH[furnished]} · Change</summary><div className="stack" style={{ marginTop: 10 }}>
           <div className="tabs">{[0, 1, 2].map((b) => <Link key={b} href={q({ beds: b })} className={"chip" + (beds === b ? " on" : "")}>{b === 0 ? "Studio" : `${b} bedroom${b > 1 ? "s" : ""}`}</Link>)}</div>
           <div className="tabs">{Object.entries(FURNISH).map(([k, l]) => <Link key={k} href={q({ furnished: k })} className={"chip" + (furnished === k ? " on" : "")}>{l}</Link>)}</div>
+          </div></details>
         </div>
 
         <div className="card">
@@ -50,12 +52,12 @@ export default async function NewListing({ searchParams }: { searchParams: { uni
           </div>
         </div>
 
-        <div className="card"><h3>Similar units we compared</h3>
+        <details className="card more"><summary><h3 style={{ display: "inline" }}>See the {pc.comps.length} similar units we compared</h3></summary>
           <div className="list" style={{ marginTop: 4 }}>{pc.comps.map((c) => (
             <div className="li" key={c.id}><span className={"tag " + (c.source === "SKYLAND_DEAL" ? "t-ok" : c.source === "SKYLAND_LISTING" ? "t-acc" : "t-mut")}>{c.label}</span>
               <div style={{ flex: 1 }}><b className="num">{peso(c.price)}{per}</b><div className="hint">{c.building} · {c.beds === 0 ? "Studio" : `${c.beds}BR`} · {c.sqm} sqm · {peso(c.perSqm)}/sqm · {fmtDate(c.date)}</div></div></div>))}
           </div>
-        </div>
+        </details>
 
         <form action={createListing} className="card stack">
           <h3>Step 2 · Your price and where to post</h3>

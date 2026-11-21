@@ -27,7 +27,7 @@ export default async function Happiness({ searchParams }: { searchParams: { ok?:
       <main className="view">
         {searchParams.error && <div className="err">{searchParams.error}</div>}
         {searchParams.ok && <div className="okmsg">{searchParams.ok}</div>}
-        <HappinessHero compact />
+        <HappinessHero here />
         <div className="grid g-7-5">
           <div className="card">
             <div className="cardhead"><div><span className="ai-badge">AI insight</span><h3 style={{ marginTop: 6 }}>What&apos;s driving happiness (last 90 days)</h3></div></div>

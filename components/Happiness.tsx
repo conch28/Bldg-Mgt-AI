@@ -5,10 +5,17 @@ import { monthLabel } from "@/lib/format";
 import { submitPulse } from "@/app/(app)/happiness/actions";
 
 /** The north-star panel shown first on the board, manager and scorecard pages. */
-export async function HappinessHero({ compact = false }: { compact?: boolean }) {
+export async function HappinessHero({ compact = false, here = false }: { compact?: boolean; here?: boolean }) {
   const [now, trend, ai] = await Promise.all([happinessNow(), happinessTrend(6), aiSavings(30)]);
   const delta = now.score - (now.lastMonth || now.score);
   const vals = trend.map((t) => Math.round(t.score));
+  if (compact) return (
+    <Link href="/happiness" className="card hh-compact" style={{ textDecoration: "none" }}>
+      <div><div className="k">Resident happiness</div><div className={"hh-big " + scoreTone(now.score)} style={{ fontSize: 40 }}>{Math.round(now.score)}<small>/100</small></div>
+        <div className={delta >= 0 ? "up" : "down"} style={{ fontSize: 13, fontWeight: 600 }}>{delta >= 0 ? "▲" : "▼"} {Math.abs(delta).toFixed(1)} · {scoreWord(now.score)}</div></div>
+      <div><div className="k">AI saved</div><div className="hh-big" style={{ fontSize: 40 }}>{Math.round(ai.hours)}<small> hrs</small></div><div className="hint" style={{ fontSize: 13 }}>last 30 days</div></div>
+    </Link>
+  );
   return (
     <div className="card hero-happy">
       <div className="hh-score">
@@ -18,7 +25,7 @@ export async function HappinessHero({ compact = false }: { compact?: boolean }) 
         <div className="row" style={{ gap: 8 }}><span className={"tag " + (now.score >= 80 ? "t-ok" : now.score >= 65 ? "t-warn" : "t-bad")}>{scoreWord(now.score)}</span>
           <span className={delta >= 0 ? "up" : "down"} style={{ fontSize: 13, fontWeight: 600 }}>{delta >= 0 ? "▲" : "▼"} {Math.abs(delta).toFixed(1)} vs last month</span></div>
         <div className="hint" style={{ marginTop: 6 }}>{now.responses} ratings in 30 days · {now.responseRate.toFixed(0)}% of owners responded · {now.detractors} unhappy</div>
-        {!compact && <Link href="/happiness" className="btn sm pri" style={{ marginTop: 10 }}>See what residents are saying</Link>}
+        {!here && <Link href="/happiness" className="btn sm pri" style={{ marginTop: 10 }}>See what residents are saying</Link>}
       </div>
       <div className="hh-chart"><div className="hint" style={{ fontSize: 11.5, marginBottom: 2 }}>Monthly average, last 6 months</div><LineChart vals={vals} labels={trend.map((t) => monthLabel(t.period))} min={Math.max(0, Math.floor((Math.min(...vals) - 5) / 10) * 10)} max={100} fmt={(v) => String(Math.round(v))} h={150} /></div>
       <div className="hh-ai">
@@ -36,9 +43,9 @@ export function PulseCard({ back = "/home" }: { back?: string }) {
   return (
     <form action={submitPulse} className="card pulse-card">
       <input type="hidden" name="back" value={back} />
-      <div><h3>How happy are you living at Skyland this month?</h3><div className="hint">Takes 5 seconds. Kumusta po kayo? The board reads every answer.</div></div>
-      <input name="comment" placeholder="Anything we can do better? (optional)" aria-label="Comment" className="inline-input" style={{ width: "100%" }} />
+      <div><h3>How's life at Skyland this month?</h3><div className="hint">Kumusta po? One tap. The board reads every answer.</div></div>
       <div className="faces">{FACES.map(([v, e, l]) => <button key={v} name="score" value={v} className="face" aria-label={l}><span>{e}</span><small>{l}</small></button>)}</div>
+      <details className="pulse-more"><summary>Add a comment (optional)</summary><input name="comment" placeholder="Anything we can do better?" aria-label="Comment" className="inline-input" style={{ width: "100%", marginTop: 8 }} /></details>
     </form>
   );
 }

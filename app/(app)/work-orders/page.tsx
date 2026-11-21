@@ -24,25 +24,25 @@ export default async function WorkOrders({ searchParams }: { searchParams: { f?:
   const canEdit = u.role !== "BOARD";
   return (
     <>
-      <PageHead title="Work orders" sub="Every request gets a ticket, an owner and a deadline" />
+      <PageHead title="Work orders" sub="Every request gets a ticket, a person and a deadline." />
       <main className="view">
         <div className="grid g4">
           <Kpi k="Open tickets" v={open} />
           <Kpi k="Closed within SLA (30 days)" v={`${sla.pct.toFixed(0)}%`} d={<span className="hint">{sla.onTime} of {sla.closed}</span>} />
           <Kpi k="Owner rating" v={`${sla.rating.toFixed(1)} / 5`} d={<span className="hint">{sla.ratedCount} ratings</span>} />
-          <Kpi k="Deadlines" v="4h · 24h · 72h" d={<span className="hint">high · medium · low priority</span>} />
+          <div className="hide-m" style={{ display: "contents" }}><Kpi k="Deadlines" v="4h · 24h · 72h" d={<span className="hint">high · medium · low priority</span>} /></div>
         </div>
         <div className="card">
           <div className="cardhead"><div><h3>Tickets</h3><div className="hint">{canEdit ? "Change status or assignee and press Save. Every change is logged." : "Read-only for board members."}</div></div>
             <div className="r">{Object.keys(FILTERS).map((k) => <Link key={k} href={`?f=${k}`} className={"chip" + (k === f ? " on" : "")}>{k[0].toUpperCase() + k.slice(1)}</Link>)}</div></div>
-          <div className="tablewrap"><table>
+          <div className="tablewrap"><table className="stack-m">
             <thead><tr><th>Ticket</th><th>Location</th><th>Issue</th><th>Priority</th><th>Source</th><th>Status / assignee</th><th className="r">SLA</th></tr></thead>
             <tbody>{list.map((w) => (
               <tr key={w.id} className="wo-row" style={{ ["--stripe" as any]: w.status === "DONE" ? "var(--ok)" : STRIPE[w.priority] }}>
                 <td className="mono">WO-{w.number}</td><td>{w.location}</td>
-                <td style={{ minWidth: 220 }}>{w.title}<div className="hint">{w.category} · opened {fmtDateTime(w.createdAt)}{w.events[0] ? ` · ${w.events[0].note}` : ""}</div></td>
-                <td>{w.priority.toLowerCase()}</td><td className="hint">{w.source}</td>
-                <td>{canEdit ? (
+                <td className="grow" style={{ minWidth: 220 }}><b>{w.title}</b><div className="hint">{w.category} · opened {fmtDateTime(w.createdAt)}{w.events[0] ? ` · ${w.events[0].note}` : ""}</div></td>
+                <td><span className={"tag " + (w.priority === "HIGH" ? "t-bad" : w.priority === "MEDIUM" ? "t-warn" : "t-mut")}>{w.priority.toLowerCase()}</span></td><td className="hint hide-m">{w.source}</td>
+                <td className="grow">{canEdit ? (
                   <form action={updateWorkOrder} className="inline-form">
                     <input type="hidden" name="id" value={w.id} />
                     <select name="status" defaultValue={w.status} aria-label="Status">{["NEW", "ASSIGNED", "IN_PROGRESS", "ESCALATED", "DONE"].map((s) => <option key={s} value={s}>{s.replace("_", " ").toLowerCase()}</option>)}</select>

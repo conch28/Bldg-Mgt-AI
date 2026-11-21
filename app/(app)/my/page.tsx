@@ -35,22 +35,19 @@ export default async function My({ searchParams }: { searchParams: { paid?: stri
   if (!units.length) return (<><PageHead title="My unit" /><main className="view"><div className="card">No unit is linked to your account yet. Please contact the admin office.</div></main></>);
   return (
     <>
-      <PageHead title="Bills & dues" sub={`Hi ${u.name.split(" ")[0]}! ${Number(units[0].sqm)} sqm · Skyland Tower`} />
+      <PageHead title="Bills & dues" sub="Pay in seconds with GCash, Maya or card. Receipts are saved here." />
       <main className="view">
         {searchParams.paid && <div className="okmsg">Payment received. Thank you! Your receipt is in Payments below.</div>}
-        <div className="grid g3">
-          <div className="card kpi"><div className="k">Amount due</div><div className={"v " + (overdue ? "amber" : "")}>{peso(due)}</div>
-            <div className="d hint">{unpaid.length ? `${unpaid.map((b) => monthLong(b.period)).join(", ")} · due ${fmtDate(unpaid[unpaid.length - 1].dueDate)}` : "You're all paid up. Salamat!"}</div>
-            {due > 0 && canPay && <form action={payBalance} className="inline-form" style={{ marginTop: 10 }}>
-              <input type="hidden" name="unitId" value={units[0].id} />
-              {!paymongoEnabled() && <select name="method" aria-label="Payment method"><option>GCash</option><option>Maya</option><option>Card</option></select>}
-              <SubmitButton label={`Pay ${peso(due)}`} busy="Processing…" small />
-              {!paymongoEnabled() && <span className="hint" style={{ fontSize: 11.5 }}>Test mode, no money moves</span>}
-            </form>}
-            {due > 0 && !canPay && <div className="hint" style={{ marginTop: 8 }}>Pay by bank transfer and send the slip to the admin office.</div>}
-          </div>
-          <Kpi k="Open repair tickets" v={wos.filter((w) => w.status !== "DONE").length} d={<Link href="/chat" style={{ color: "var(--accent)" }}>Report a problem in chat →</Link>} />
-          <Kpi k="Upcoming services" v={bookings.filter((b) => b.slot > nowManila()).length} d={<Link href="/services" style={{ color: "var(--accent)" }}>Book a service →</Link>} />
+        <div className={"card status-card" + (due ? "" : " ok")}>
+          <div style={{ flex: 1, minWidth: 180 }}><div className="k">{due ? (overdue ? "Overdue" : "Amount due") : "Dues"}</div><div className="v num">{due ? peso(due) : "All paid ✓"}</div>
+            <div className="s">{unpaid.length ? `${[...new Set(unpaid.map((b) => monthLong(b.period)))].join(", ")} · due ${fmtDate(unpaid[unpaid.length - 1].dueDate)}` : "Salamat po! Nothing to pay right now."}</div></div>
+          {due > 0 && canPay && <form action={payBalance} className="paybox">
+            <input type="hidden" name="unitId" value={units[0].id} />
+            {!paymongoEnabled() && <div className="seg" role="radiogroup" aria-label="Payment method">{["GCash", "Maya", "Card"].map((m, i) => <label key={m}><input type="radio" name="method" value={m} defaultChecked={i === 0} /><span>{m}</span></label>)}</div>}
+            <SubmitButton label={`Pay ${peso(due)}`} busy="Processing…" cls="btn" />
+            {!paymongoEnabled() && <span className="s" style={{ fontSize: 12 }}>Demo mode · no money moves</span>}
+          </form>}
+          {due > 0 && !canPay && <div className="s">Pay by bank transfer and send the slip to the admin office.</div>}
         </div>
         <div className="grid g2">
           <div className="card"><h3>My repair tickets</h3>
@@ -61,7 +58,7 @@ export default async function My({ searchParams }: { searchParams: { paid?: stri
               </div></div>)) : <div className="hint">No tickets yet.</div>}</div></div>
           <div className="card"><h3>Statements and payments</h3>
             <div className="tablewrap"><table><thead><tr><th>Month</th><th className="r">Amount</th><th>Status</th></tr></thead>
-              <tbody>{bills.map((b) => <tr key={b.id}><td>{monthLong(b.period)}</td><td className="r num">{peso(b.amount)}</td><td><StatusTag s={b.status} /></td></tr>)}</tbody></table></div>
+              <tbody>{bills.map((b) => <tr key={b.id}><td>{monthLong(b.period)}{units.length > 1 && <span className="hint"> · {units.find((x) => x.id === b.unitId)?.code}</span>}</td><td className="r num">{peso(b.amount)}</td><td><StatusTag s={b.status} /></td></tr>)}</tbody></table></div>
             <div className="hint" style={{ marginTop: 10 }}>Recent payments</div>
             <div className="list">{payments.map((p) => <div className="li" key={p.id}><div style={{ flex: 1 }}>{peso(p.amount)} for {monthLong(p.bill.period)} via {p.method}<div className="hint mono">{p.reference} · {fmtDate(p.createdAt)}</div></div></div>)}</div>
           </div>

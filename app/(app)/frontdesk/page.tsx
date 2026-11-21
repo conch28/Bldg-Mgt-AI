@@ -1,5 +1,6 @@
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import Tip from "@/components/Tip";
 import { PageHead, Kpi } from "@/components/ui";
 import SubmitButton from "@/components/SubmitButton";
 import { fmtDate, fmtTime, nowManila } from "@/lib/format";
@@ -22,15 +23,16 @@ export default async function FrontDesk({ searchParams }: { searchParams: { code
   const valid = found && found.validFrom <= now && found.validTo >= now;
   return (
     <>
-      <PageHead title="Front desk" sub="Type or scan a visitor's pass code. The owner is notified the moment their guest checks in." />
+      <PageHead title="Front desk" sub="Type the visitor's 6-letter code. The owner gets a text when they arrive." />
       <main className="view">
+        <Tip id="guard-desk" title="Every visitor has a code.">Type it in the box, then tap Check in. No code? Call the unit owner before letting anyone up. SOS alerts show in red at the top.</Tip>
         {searchParams.error && <div className="err">{searchParams.error}</div>}
         {searchParams.ok && <div className="okmsg">{searchParams.ok === "in" ? "Checked in. The owner has been notified." : "Checked out."}</div>}
         <div className="grid g-7-5">
           <div className="card">
             <h3>Check a pass</h3>
-            <form action={checkPass} className="row" style={{ marginTop: 10 }}>
-              <input name="code" defaultValue={searchParams.code ?? ""} placeholder="e.g. K7Q2MX" autoFocus autoComplete="off" aria-label="Pass code" className="pass-code" style={{ width: 230, fontSize: 22, padding: "8px 12px", border: "1px solid var(--line)", borderRadius: 10, background: "var(--panel-2)", color: "var(--fg)", textTransform: "uppercase" }} />
+            <form action={checkPass} className="codebox" style={{ marginTop: 10 }}>
+              <input name="code" defaultValue={searchParams.code ?? ""} placeholder="K7Q2MX" autoComplete="off" autoCapitalize="characters" inputMode="text" maxLength={6} aria-label="Pass code" className="pass-code" />
               <input type="hidden" name="action" value="lookup" />
               <SubmitButton label="Look up" busy="Checking…" />
             </form>
@@ -48,7 +50,7 @@ export default async function FrontDesk({ searchParams }: { searchParams: { code
             )}
           </div>
           <div className="stack">
-            <div className="grid g2"><Kpi k="Expected today" v={expected.length} /><Kpi k="Inside now" v={inside.length} /></div>
+            <div className="mini-row"><div className="mini"><b className="n">{expected.length}</b><span>expected<br />today</span></div><div className="mini"><b className="n">{inside.length}</b><span>inside<br />now</span></div></div>
             <div className="card"><h3>Amenities today</h3>
               <div className="list" style={{ marginTop: 6 }}>{amen.length ? amen.map((b) => <div className="li" key={b.id}><span className="tag t-acc">{fmtTime(b.start)}</span><div>{b.amenity.name} · Unit {b.unit.code}{b.guests ? ` · +${b.guests}` : ""}</div></div>) : <div className="hint">None.</div>}</div>
             </div>

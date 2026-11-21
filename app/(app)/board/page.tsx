@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import Tip from "@/components/Tip";
 import { PageHead, Kpi } from "@/components/ui";
 import { LineChart } from "@/components/charts";
 import { HappinessHero } from "@/components/Happiness";
@@ -28,6 +29,7 @@ export default async function Board() {
     <>
       <PageHead title="Today at Skyland" sub={`Board view · ${nowManila().toLocaleDateString("en-PH", { timeZone: "Asia/Manila", dateStyle: "full" })}`} />
       <main className="view">
+        <Tip id="board-overview" title="Your building at a glance.">Green means on track, amber needs a look, red needs a decision. Tap any number to see the detail behind it.</Tip>
         <HappinessHero />
         <div className="grid g4">
           <Kpi k={`${monthLong(closed)} collections`} v={`${last?.rate.toFixed(1) ?? "–"}%`} d={first && last ? <span className={last.rate >= first.rate ? "up" : "down"}>{last.rate >= first.rate ? "▲" : "▼"} {Math.abs(last.rate - first.rate).toFixed(1)} pts in 12 months</span> : null} />
