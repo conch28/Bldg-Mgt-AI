@@ -40,7 +40,8 @@ export default async function WorkOrders({ searchParams }: { searchParams: { f?:
             <tbody>{list.map((w) => (
               <tr key={w.id} className="wo-row" style={{ ["--stripe" as any]: w.status === "DONE" ? "var(--ok)" : STRIPE[w.priority] }}>
                 <td className="mono">WO-{w.number}</td><td>{w.location}</td>
-                <td className="grow" style={{ minWidth: 220 }}><b>{w.title}</b><div className="hint">{w.category} · opened {fmtDateTime(w.createdAt)}{w.events[0] ? ` · ${w.events[0].note}` : ""}</div></td>
+                <td className="grow" style={{ minWidth: 220 }}><b>{w.title}</b><div className="hint">{w.category} · opened {fmtDateTime(w.createdAt)}{w.events[0] ? ` · ${w.events[0].note}` : ""}</div>
+                  {w.photo && <details style={{ marginTop: 4 }}><summary className="hint" style={{ cursor: "pointer" }}>📷 Resident photo{w.aiNote ? ` · ${w.aiNote}` : ""}</summary><img src={w.photo} alt={`Photo for WO-${w.number}`} style={{ maxWidth: 260, borderRadius: 8, marginTop: 6 }} /></details>}</td>
                 <td><span className={"tag " + (w.priority === "HIGH" ? "t-bad" : w.priority === "MEDIUM" ? "t-warn" : "t-mut")}>{w.priority.toLowerCase()}</span></td><td className="hint hide-m">{w.source}</td>
                 <td className="grow">{canEdit ? (
                   <form action={updateWorkOrder} className="inline-form">

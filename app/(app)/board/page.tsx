@@ -5,13 +5,16 @@ import Tip from "@/components/Tip";
 import { PageHead, Kpi } from "@/components/ui";
 import { LineChart } from "@/components/charts";
 import { HappinessHero } from "@/components/Happiness";
+import BuildingTwin from "@/components/twin/BuildingTwin";
+import { EarlyWarnings, FixLeaderboard } from "@/components/Insights";
+import { buildingTwin } from "@/lib/building";
 import { collectionTrend, overdueAccounts, slaStats, budgetFor, latestClosedPeriod } from "@/lib/metrics";
 import { peso, pesoK, monthLabel, monthLong, fmtDateTime, nowManila, currentPeriod } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
 export default async function Board() {
-  await requireRole("BOARD", "MANAGER", "ADMIN");
+  const u = await requireRole("BOARD", "MANAGER", "ADMIN");
   const closed = await latestClosedPeriod();
   const [trend, overdue, sla, budget, openWO, escalated, recent, nov] = await Promise.all([
     collectionTrend(12), overdueAccounts(), slaStats(30), budgetFor(closed),
@@ -20,6 +23,7 @@ export default async function Board() {
     prisma.auditLog.findMany({ where: { action: { in: ["payment", "work_order", "booking", "reminder", "report", "resident follow-up", "announcement sent", "urgent alert"] } }, orderBy: { createdAt: "desc" }, take: 6, include: { user: true } }),
     prisma.bill.aggregate({ where: { period: currentPeriod() }, _sum: { amount: true, paid: true } }),
   ]);
+  const twin = await buildingTwin(u.role);
   const last = trend.find((t) => t.period === closed);
   const first = trend[0];
   const overBudget = budget.lines.filter((l) => Number(l.actual) > Number(l.budget) * 1.02);
@@ -31,6 +35,7 @@ export default async function Board() {
       <main className="view">
         <Tip id="board-overview" title="Your building at a glance.">Green means on track, amber needs a look, red needs a decision. Tap any number to see the detail behind it.</Tip>
         <HappinessHero />
+        <BuildingTwin data={twin} staff={u.role !== "BOARD"} compact />
         <div className="grid g4">
           <Kpi k={`${monthLong(closed)} collections`} v={`${last?.rate.toFixed(1) ?? "–"}%`} d={first && last ? <span className={last.rate >= first.rate ? "up" : "down"}>{last.rate >= first.rate ? "▲" : "▼"} {Math.abs(last.rate - first.rate).toFixed(1)} pts in 12 months</span> : null} />
           <Kpi k="Open work orders" v={openWO} d={<><span className="up">{sla.pct.toFixed(0)}% on time</span> · {escalated.length} escalated</>} />
@@ -55,6 +60,10 @@ export default async function Board() {
             <div className="cardhead"><div><h3>Collection rate, last 12 months</h3><div className="hint">Share of each month&apos;s dues paid by the due date</div></div></div>
             <LineChart vals={trend.slice(0, -1).map((t) => t.rate)} labels={trend.slice(0, -1).map((t) => monthLabel(t.period))} min={76} max={100} fmt={(v) => v.toFixed(0) + "%"} />
           </div>
+        </div>
+        <div className="grid g2">
+          <EarlyWarnings canAct={u.role !== "BOARD"} />
+          <FixLeaderboard />
         </div>
         <div className="grid g2">
           <div className="card"><h3>Recent activity</h3>

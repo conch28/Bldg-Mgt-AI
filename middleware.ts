@@ -9,7 +9,7 @@ const RULES: [RegExp, string[]][] = [
   [/^\/frontdesk/, ["MANAGER", "ADMIN", "GUARD"]],
   [/^\/listings/, ["BOARD", "MANAGER", "ADMIN"]],
   [/^\/(moving|registrations|sos)(\/|$)/, ["OWNER", "MANAGER", "ADMIN", "GUARD"]],
-  [/^\/(home|my|chat|services|passes|updates|property)(\/|$)/, ["OWNER"]],
+  [/^\/(home|my|chat|services|passes|updates|property|report)(\/|$)/, ["OWNER"]],
 ];
 
 export default withAuth({

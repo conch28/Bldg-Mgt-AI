@@ -12,6 +12,7 @@ const B = ["BOARD", "MANAGER", "ADMIN"], M = ["MANAGER", "ADMIN"], O = ["OWNER"]
 const ALL: Item[] = [
   { href: "/home", label: "Home", group: "Everyday", icon: "home", roles: O },
   { href: "/my", label: "Bills & dues", group: "Everyday", icon: "card", roles: O },
+  { href: "/report", label: "Report a problem", group: "Everyday", icon: "wrench", roles: O },
   { href: "/chat", label: "Helpdesk", group: "Everyday", icon: "chat", roles: O },
   { href: "/updates", label: "Building updates", group: "Everyday", icon: "mega", roles: O },
   { href: "/property", label: "Rent out or sell", group: "My unit", icon: "key", roles: O },

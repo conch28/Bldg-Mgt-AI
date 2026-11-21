@@ -299,3 +299,70 @@ export async function classifyFeedback(comment: string | null | undefined, score
   } catch { return local; }
 }
 export const anthropicClient = () => client();
+
+// ---------- Manager morning briefing (spoken) ----------
+/** Turns the day's facts into a short script read aloud by the phone. Falls back to the plain template. */
+export async function writeBriefing(facts: string, fallback: string): Promise<{ text: string; ai: boolean }> {
+  if (!aiEnabled()) return { text: fallback, ai: false };
+  try {
+    const res = await client().messages.create({
+      model: MODEL, max_tokens: 2000, output_config: { effort: "low" },
+      system: "You are the AI operations assistant of a condominium in Metro Manila. Write the property manager's spoken morning briefing: under 150 words, warm and brisk, like a voice note from a trusted colleague. Lead with what needs action first and say exactly what to do. Natural English with a light touch of Taglish where it fits (polite, 'po' once at most). No markdown, no bullet points, no emojis. Say money as 'pesos' (e.g. '45,200 pesos'). Use only the facts given; never invent names, numbers or events.",
+      messages: [{ role: "user", content: facts }],
+    } as any) as any;
+    const text = (res.content as any[]).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+    return text ? { text, ai: true } : { text: fallback, ai: false };
+  } catch { return { text: fallback, ai: false }; }
+}
+
+// ---------- Photo-to-ticket ----------
+export const REPAIR_CATEGORIES = ["Plumbing", "Electrical", "Civil", "Mechanical", "Elevator", "Security", "Housekeeping", "Other"] as const;
+const PhotoRead = z.object({
+  title: z.string().describe("Short ticket title in English, e.g. 'Water leaking from bathroom ceiling'"),
+  category: z.enum(REPAIR_CATEGORIES),
+  priority: z.enum(["LOW", "MEDIUM", "HIGH"]).describe("HIGH for active leaks, sparks, smoke, no water/power, safety or elevator problems; MEDIUM if it blocks normal use; LOW if cosmetic"),
+  seen: z.string().describe("One sentence on what is visible in the photo, for the technician"),
+  advice: z.string().describe("One or two short sentences telling the resident what to do safely while waiting, in polite English with light Taglish (po)"),
+  confident: z.boolean().describe("false if the photo is unclear or does not show a building problem"),
+});
+export type PhotoReadT = z.infer<typeof PhotoRead>;
+
+const CAT_WORDS: [typeof REPAIR_CATEGORIES[number], RegExp][] = [
+  ["Plumbing", /leak|tulo|drip|water|tubig|pipe|faucet|sink|toilet|drain|clog|bara|shower|heater/i],
+  ["Electrical", /spark|outlet|socket|breaker|light|ilaw|power|kuryente|wire|switch|smoke detector|intercom/i],
+  ["Mechanical", /aircon|ac |a\/c|fan|exhaust|ventil|pump/i],
+  ["Elevator", /elevator|lift/i],
+  ["Civil", /crack|tile|ceiling|wall|door|window|paint|stain|damp|bitak/i],
+  ["Housekeeping", /cockroach|ipis|ants|langgam|pest|rat|daga|garbage|smell|amoy|dirty/i],
+  ["Security", /lock|door access|cctv|guard|stranger/i],
+];
+const URGENT = /leak|tulo|flood|spark|smoke|usok|fire|sunog|gas|no water|walang tubig|no power|brownout|stuck|elevator/i;
+
+export function readPhotoLocal(caption: string): PhotoReadT {
+  const c = caption.trim();
+  const category = CAT_WORDS.find(([, re]) => re.test(c))?.[0] ?? "Other";
+  const priority = URGENT.test(c) ? "HIGH" : category === "Other" || category === "Housekeeping" ? "LOW" : "MEDIUM";
+  const title = c ? c.charAt(0).toUpperCase() + c.slice(0, 90).slice(1) : "Repair request with photo";
+  const advice = priority === "HIGH"
+    ? "For your safety po, keep away from the area and turn off the water valve or breaker if it is safe to do so. The team is on the way."
+    : "Thank you po! A technician will check the photo and contact you to schedule a visit.";
+  return { title, category, priority, seen: c ? `Resident's note: ${c}` : "Photo attached by the resident.", advice, confident: Boolean(c) };
+}
+
+export async function readRepairPhoto(dataUrl: string, caption: string): Promise<PhotoReadT & { ai: boolean }> {
+  if (!aiEnabled()) return { ...readPhotoLocal(caption), ai: false };
+  const m = dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
+  if (!m) return { ...readPhotoLocal(caption), ai: false };
+  try {
+    const res = await client().messages.parse({
+      model: MODEL, max_tokens: 2000, output_config: { effort: "low", format: zodOutputFormat(PhotoRead) },
+      system: "You triage repair photos sent by residents of a condominium in Metro Manila. Look at the photo (and the resident's optional note, which may be in English, Filipino or Taglish) and file a maintenance ticket. Be specific about what you can actually see; do not guess hidden causes. If the photo is not a building problem, say so in 'seen' and set confident to false.",
+      messages: [{ role: "user", content: [
+        { type: "image", source: { type: "base64", media_type: m[1], data: m[2] } },
+        { type: "text", text: caption ? `Resident's note: ${caption}` : "No note from the resident." },
+      ] }],
+    } as any) as any;
+    const out = res.parsed_output as PhotoReadT | null;
+    return out ? { ...out, ai: true } : { ...readPhotoLocal(caption), ai: false };
+  } catch { return { ...readPhotoLocal(caption), ai: false }; }
+}
