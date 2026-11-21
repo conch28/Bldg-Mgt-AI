@@ -12,6 +12,10 @@ import BuildingTwin from "@/components/twin/BuildingTwin";
 import MorningBriefing from "@/components/MorningBriefing";
 import { EarlyWarnings, FixLeaderboard } from "@/components/Insights";
 import { buildingTwin } from "@/lib/building";
+import { getWeather } from "@/lib/weather";
+import { WeatherCard } from "@/components/Weather";
+import { controlFlags } from "@/lib/procurement";
+import { leakCheck } from "@/lib/advisor";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +43,14 @@ export default async function Today() {
     slaStats(30),
     atRiskResidents(),
   ]);
-  const twin = await buildingTwin(u.role);
+  const [twin, weather, flags, leak, toSign, roundsToday] = await Promise.all([
+    buildingTwin(u.role), getWeather(), controlFlags(), leakCheck(),
+    prisma.purchaseRequest.findMany({ where: { status: { in: ["PENDING", "APPROVED"] } }, select: { number: true, title: true, status: true, requestedBy: true } }),
+    prisma.guardRound.count({ where: { startedAt: { gte: start, lt: end } } }),
+  ]);
+  const prep = weather.risk === "storm" || weather.risk === "rain";
+  const prepOpen = prep ? await prisma.workOrder.findFirst({ where: { source: "Weather", status: { not: "DONE" } }, select: { number: true } }) : null;
+  const mySign = toSign.filter((p) => (p.status === "PENDING" && p.requestedBy !== u.id) || p.status === "APPROVED");
   const breached = open.filter((w) => now.getTime() - w.createdAt.getTime() > w.slaHours * 3600000);
   const escalated = open.filter((w) => w.status === "ESCALATED");
   const fresh = open.filter((w) => w.status === "NEW");
@@ -52,6 +63,11 @@ export default async function Today() {
     { n: pending.length, cls: pending.length ? "warn" : "ok", t: "Resident updates to approve", d: pending.map((a) => a.title).slice(0, 2).join(" · ") || "Nothing waiting", href: "/comms", cta: "Approve" },
     { n: pm.length, cls: pm.some((t) => t.nextDue < now) ? "bad" : pm.length ? "warn" : "ok", t: "Maintenance due this week", d: pm.slice(0, 2).map((t) => `${t.asset}: ${t.task}`).join(" · ") || "Nothing due", href: "/maintenance", cta: "Open" },
     { n: over60.length, cls: over60.length ? "warn" : "ok", t: "Accounts over 60 days late", d: over60.length ? `${peso(over60.reduce((s, o) => s + o.amount, 0))} outstanding` : "None", href: "/collections", cta: "Follow up" },
+    ...(prep ? [{ n: prepOpen ? 0 : 1, cls: "bad", t: weather.risk === "storm" ? "Typhoon prep before the storm" : "Heavy-rain prep", d: prepOpen ? `Assigned as WO-${prepOpen.number}` : weather.headline, href: "/advisor#weather", cta: "Prep" }] : []),
+    ...(leak?.leak ? [{ n: 1, cls: "bad", t: "Possible hidden water leak", d: `Night water flow up ${Math.round(leak.rise * 100)}% (guard meter readings)`, href: "/advisor", cta: "Check" }] : []),
+    { n: mySign.length, cls: mySign.length ? "warn" : "ok", t: "Purchases to approve or order", d: mySign.slice(0, 2).map((p) => `PR-${p.number} ${p.title}`).join(" · ") || "Nothing waiting", href: "/procurement?tab=requests", cta: "Open" },
+    { n: flags.filter((f) => f.level === "high").length, cls: flags.some((f) => f.level === "high") ? "bad" : "ok", t: "Spending red flags", d: flags.slice(0, 1).map((f) => f.title).join("") || "No red flags", href: "/procurement?tab=controls", cta: "Review" },
+    { n: roundsToday ? 0 : 1, cls: roundsToday ? "ok" : "warn", t: "Guard rounds today", d: roundsToday ? `${roundsToday} round${roundsToday > 1 ? "s" : ""} started today` : "No round started yet today", href: "/rounds", cta: "Check" },
     { n: vendors.length, cls: vendors.length ? "warn" : "ok", t: "Vendor contracts or insurance expiring", d: vendors.map((v) => v.name).slice(0, 2).join(" · ") || "All current", href: "/vendors", cta: "Renew" },
   ].sort((a, b) => (a.n === 0 ? 1 : 0) - (b.n === 0 ? 1 : 0));
   const done = todos.filter((t) => t.n === 0).length;
@@ -63,7 +79,7 @@ export default async function Today() {
       <main className="view">
         <Tip id="mgr-today" title="Work top to bottom.">Each row is one kind of task, most urgent first. When a row says Clear, you're done with it. AI already drafted replies, updates and reminders for you to approve.</Tip>
         <MorningBriefing />
-        <BuildingTwin data={twin} staff />
+        <BuildingTwin data={twin} staff weather={weather} />
         <div className="grid g-7-5">
           <div className="stack">
           <div className="card"><h3>Your list</h3>
@@ -75,6 +91,7 @@ export default async function Today() {
           <EarlyWarnings canAct />
           </div>
           <div className="stack">
+            <WeatherCard w={weather} staff compact />
             <HappinessHero compact />
             <div className="card"><h3>Pulse</h3>
               <div className="list" style={{ marginTop: 6 }}>

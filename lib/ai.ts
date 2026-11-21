@@ -368,6 +368,20 @@ export async function readRepairPhoto(dataUrl: string, caption: string): Promise
   } catch { return { ...readPhotoLocal(caption), ai: false }; }
 }
 
+// ---------- Savings advisor summary ----------
+/** Rewrites the computed savings ideas as a short note to the board. The numbers come from our data, never the model. */
+export async function writeAdvice(facts: string, fallback: string): Promise<{ text: string; ai: boolean }> {
+  if (!aiEnabled()) return { text: fallback, ai: false };
+  try {
+    const res = await client().messages.create({
+      model: MODEL, max_tokens: 1500, output_config: { effort: "low" },
+      system: "You are the AI savings advisor of a condominium corporation in Makati. Write a note to the board in under 90 words: the total yearly saving, then the two or three ideas to start with and why, most urgent first. Plain, confident English; polite. No markdown, bullets or emojis. Use only the facts and peso amounts given; never invent numbers, vendors or events.",
+      messages: [{ role: "user", content: facts }],
+    } as any) as any;
+    const text = (res.content as any[]).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+    return text ? { text, ai: true } : { text: fallback, ai: false };
+  } catch { return { text: fallback, ai: false }; }
+
 // ---------- Generic writer for board documents (agenda, minutes, advisories) ----------
 /** One-shot writing task. Uses only the facts given; returns the fallback when there is no key or the call fails. */
 export async function writeDoc(system: string, facts: string, fallback: string): Promise<{ text: string; ai: boolean }> {
