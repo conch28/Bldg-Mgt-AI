@@ -9,6 +9,7 @@ import Tip from "@/components/Tip";
 import { peso, fmtDate, fmtDateTime, monthLong, nowManila } from "@/lib/format";
 import { WeatherCard } from "@/components/Weather";
 import { getWeather } from "@/lib/weather";
+import { activeStorm } from "@/lib/typhoon";
 
 export const dynamic = "force-dynamic";
 
@@ -41,9 +42,11 @@ export default async function Home({ searchParams }: { searchParams: { thanks?: 
     prisma.pass.findMany({ where: { userId: u.id, validTo: { gte: now } }, orderBy: { validFrom: "asc" }, take: 3 }),
     prisma.poll.findMany({ where: { closesAt: { gte: now }, votes: { none: { userId: u.id } } }, take: 2 }),
   ]);
-  const [weather, fixed] = await Promise.all([
+  const [weather, fixed, storm, nextEvent] = await Promise.all([
     getWeather(),
     prisma.workOrder.findMany({ where: { unitId: null, status: "DONE", closedAt: { gte: new Date(now.getTime() - 7 * 86400000) }, NOT: { source: "Weather" } }, orderBy: { closedAt: "desc" }, take: 40, select: { id: true, title: true, location: true, source: true, closedAt: true, createdAt: true } }),
+    activeStorm(),
+    prisma.event.findFirst({ where: { startsAt: { gte: now } }, orderBy: { startsAt: "asc" }, include: { _count: { select: { rsvps: true } } } }),
   ]);
   const pulsed = await prisma.pulse.findFirst({ where: { userId: u.id, kind: "MONTHLY", createdAt: { gte: new Date(now.getTime() - 25 * 86400000) } } });
   const due = bills.reduce((s, b) => s + Number(b.amount) - Number(b.paid), 0);
@@ -73,6 +76,7 @@ export default async function Home({ searchParams }: { searchParams: { thanks?: 
       <PageHead title={`${greet}, ${first}`} sub={units.length ? `Unit ${units.map((x) => x.code).join(" & ")} · Skyland Plaza` : "Skyland Plaza"} />
       <main className="view">
         {searchParams.thanks && <div className="okmsg">{Number(searchParams.thanks) <= 2 ? "Salamat po for telling us. Your property manager will reach out to you today." : "Salamat po! Your feedback goes straight to the board."}</div>}
+        {storm && <Link href="/typhoon" className="card storm-home" style={{ textDecoration: "none", color: "inherit" }}><span style={{ fontSize: 30 }} aria-hidden="true">{storm.phase === "CHECKIN" ? "🙋" : "🌀"}</span><div><b>{storm.phase === "CHECKIN" ? `${storm.name} has passed. Are you OK po? Tap to check in.` : `Typhoon mode is on for ${storm.name}.`}</b><div className="hint">{storm.phase === "CHECKIN" ? "One tap: Safe, Damage, or I need help." : "See what to do now, and move your car from B2 to B1 if you can."}</div></div></Link>}
         <Tip id="owner-home" title="Need anything? Just tap Help.">Type it like you'd text a friend, in English or Taglish. Repairs become tickets automatically, and you'll get updates by SMS.</Tip>
 
         <div className={"card status-card" + (due ? "" : " ok")}>
@@ -110,6 +114,11 @@ export default async function Home({ searchParams }: { searchParams: { thanks?: 
             <span className="fi-t"><b>{!d.readAt && <span className="dot-new" aria-label="New" />}{d.announcement.title}</b><span>{clip((tl && d.announcement.bodyTl) || d.announcement.bodyEn)}</span></span><span className="chev">›</span></Link>)) : <div className="empty">No updates yet.</div>}</div></div>
 
         {weather.risk === "ok" && <WeatherCard w={weather} resident compact />}
+        <Link href={nextEvent ? "/neighbors?tab=events" : "/neighbors"} className="card" style={{ textDecoration: "none", color: "inherit", display: "flex", gap: 12, alignItems: "center" }}>
+          <span style={{ fontSize: 26 }} aria-hidden="true">🏘️</span>
+          <div style={{ flex: 1, minWidth: 0 }}><b>{nextEvent ? nextEvent.title : "Neighbours"}</b><div className="hint">{nextEvent ? `${nextEvent.startsAt.toLocaleString("en-PH", { timeZone: "Asia/Manila", weekday: "short", hour: "numeric", minute: "2-digit" })} · ${nextEvent.place} · ${nextEvent._count.rsvps} going` : "Say hi, join a group, or thank the staff."}</div></div>
+          <span className="btn sm">Open</span>
+        </Link>
 
         <InstallApp />
       </main>

@@ -45,7 +45,7 @@ export async function eraseUser(fd: FormData) {
     prisma.registration.updateMany({ where: { userId: id }, data: { name: "Removed", details: "Removed" } }),
     prisma.unit.updateMany({ where: { ownerId: id }, data: { ownerId: null, ownerName: null } }),
     prisma.user.update({ where: { id }, data: {
-      name: "Former resident", email: `erased-${id}@erased.invalid`, phone: null, messengerPsid: null, active: false, consentAt: null,
+      name: "Former resident", email: `erased-${id}@erased.invalid`, phone: null, messengerPsid: null, viberId: null, active: false, consentAt: null,
       passwordHash: await bcrypt.hash(crypto.randomBytes(24).toString("hex"), 10), notifySms: false, notifyEmail: false, notifyMessenger: false,
     } }),
     prisma.privacyRequest.update({ where: { id: req.id }, data: { status: "DONE", reply: "Your personal data was deleted. Billing records are kept without your name, as tax rules require.", closedAt: new Date() } }),

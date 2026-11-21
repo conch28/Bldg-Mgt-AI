@@ -7,6 +7,7 @@ import type { Role } from "@prisma/client";
 import { prisma } from "./db";
 import { nowManila } from "./format";
 import { SITE, parseUnit, towerLabel } from "./skyland";
+import { unitEnergy, type EnergyFlag } from "./energy";
 
 export type TwinState = "red" | "amber" | "green" | "watch" | null;
 export type TwinTicket = {
@@ -19,6 +20,7 @@ export type TwinUnit = {
   happy: number | null; happyN: number; lastComment: string | null; sos: { kind: string; at: number } | null; watch: string | null;
   sqm: number; occ: Occupancy; leaseEnd: number | null; market: Market; price: number | null;
   dues: DuesBucket; balance: number; daysLate: number;
+  energy: EnergyFlag; kwh: number | null; m3: number | null; energyNote: string | null;
 };
 export type Occupancy = "OWNER" | "LEASED" | "VACANT" | "UNKNOWN";
 export type Market = "SALE" | "LEASE" | "NONE";
@@ -69,6 +71,7 @@ export async function buildingTwin(role: Role): Promise<TwinData> {
     prisma.amenityBooking.findMany({ where: { status: "CONFIRMED", start: { gte: dayStart, lt: dayEnd } }, select: { start: true, end: true, guests: true, amenity: { select: { name: true } }, unit: { select: { code: true } } }, orderBy: { start: "asc" } }),
     prisma.registration.findMany({ where: { kind: "VEHICLE", status: "APPROVED" }, select: { name: true, details: true, unit: { select: { code: true } } } }),
   ]);
+  const energy = await unitEnergy(units.map((u) => ({ id: u.id, code: u.code, sqm: Number(u.sqm), vacant: u.occupancy === "VACANT" && !leases.some((l) => l.unit.code === u.code) })));
   const listBy = new Map<string, { kind: string; price: number }>();
   for (const l of listings) { const cur = listBy.get(l.unitId); if (!cur || l.kind === "SALE") listBy.set(l.unitId, { kind: l.kind, price: Number(l.price) }); }
   const owe = new Map<string, { balance: number; oldestLate: number | null; dueNow: boolean }>();
@@ -118,6 +121,8 @@ export async function buildingTwin(role: Role): Promise<TwinData> {
       market: (listBy.get(u.id)?.kind as Market | undefined) ?? "NONE", price: listBy.get(u.id)?.price ?? null,
       dues: !o ? "PAID" : o.oldestLate == null ? "DUE" : lateDays <= 30 ? "LATE30" : lateDays <= 90 ? "LATE90" : "LATE90P",
       balance: o?.balance ?? 0, daysLate: lateDays,
+      energy: energy.get(u.code)?.flag ?? "NODATA", kwh: energy.get(u.code)?.kwh ?? null, m3: energy.get(u.code)?.m3 ?? null,
+      energyNote: role !== "OWNER" ? energy.get(u.code)?.note ?? null : null,
     };
   });
 

@@ -3,7 +3,9 @@ import { prisma } from "@/lib/db";
 import { PageHead } from "@/components/ui";
 import SubmitButton from "@/components/SubmitButton";
 import { fmtDate, nowManila } from "@/lib/format";
-import { vote, createPoll } from "./actions";
+import Link from "next/link";
+import { vote, createPoll, assignProxy, revokeProxy } from "./actions";
+import { quorum } from "@/lib/meetings";
 
 export const dynamic = "force-dynamic";
 const COLORS = ["var(--accent)", "var(--warn)", "var(--bad)", "var(--ok)", "var(--muted)"];
@@ -13,10 +15,17 @@ export default async function Polls({ searchParams }: { searchParams: { ok?: str
   const owner = u.role === "OWNER";
   const now = nowManila();
   const [polls, totals] = await Promise.all([
-    prisma.poll.findMany({ orderBy: { closesAt: "desc" }, include: { options: true, votes: { select: { optionId: true, weight: true, userId: true } } } }),
+    prisma.poll.findMany({ orderBy: { closesAt: "desc" }, include: { options: true, votes: { select: { optionId: true, weight: true, userId: true, byProxy: true } } } }),
     prisma.unit.aggregate({ _sum: { sqm: true }, _count: true }),
   ]);
   const totalSqm = Number(totals._sum.sqm ?? 0);
+  const agm = await prisma.meeting.findFirst({ where: { kind: "AGM", startsAt: { gte: now } }, orderBy: { startsAt: "asc" } });
+  const [q, myProxy, held, board] = agm ? await Promise.all([
+    quorum(agm.id),
+    owner ? prisma.proxy.findFirst({ where: { meetingId: agm.id, grantorId: u.id, revokedAt: null } }) : null,
+    owner ? prisma.proxy.findMany({ where: { meetingId: agm.id, holderUserId: u.id, revokedAt: null } }) : [],
+    owner ? prisma.user.findMany({ where: { role: "BOARD", active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }) : [],
+  ]) : [null, null, [], []];
   const in2w = new Date(now.getTime() + 14 * 86400000).toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
   return (
     <>
@@ -24,6 +33,29 @@ export default async function Polls({ searchParams }: { searchParams: { ok?: str
       <main className="view">
         {searchParams.error && <div className="err">{searchParams.error}</div>}
         {searchParams.ok && <div className="okmsg">{searchParams.ok}</div>}
+        {agm && q && (
+          <div className="card agm-card">
+            <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
+              <div><span className="tag t-warn">Annual general meeting</span><h3 style={{ marginTop: 6 }}>{agm.title}</h3><div className="hint">{fmtDate(agm.startsAt)} · {agm.place}</div></div>
+              <div style={{ minWidth: 200 }}><div className="hint">Quorum {q.pct.toFixed(0)}% of 50%+ needed</div><div className="quorum"><i className="qp" style={{ width: `${q.presentPct}%` }} /><i className="qx" style={{ width: `${q.proxyPct}%` }} /><b style={{ left: "50%" }} /></div></div>
+            </div>
+            {owner ? (myProxy ? (
+              <div className="row" style={{ marginTop: 8, flexWrap: "wrap" }}><span className="tag t-ok">Your proxy: {myProxy.holderName}</span><form action={revokeProxy}><input type="hidden" name="meetingId" value={agm.id} /><SubmitButton label="Cancel proxy" small cls="btn" busy="…" /></form></div>
+            ) : (
+              <details className="more" style={{ marginTop: 8 }}><summary>Can&apos;t attend? Name a proxy so your unit still counts</summary>
+                <form action={assignProxy} style={{ marginTop: 8 }}><input type="hidden" name="meetingId" value={agm.id} />
+                  <div className="formgrid">
+                    <div className="field"><label htmlFor="holder">Proxy</label><select id="holder" name="holder">{board.map((b) => <option key={b.id} value={`user:${b.id}`}>{b.name} (board)</option>)}<option value="unit">Another owner, by unit code</option></select></div>
+                    <div className="field"><label htmlFor="unit">Their unit (if another owner)</label><input id="unit" name="unit" placeholder="903A" /></div>
+                  </div>
+                  <div className="hint" style={{ marginBottom: 8 }}>Digital proxy, recorded with date and time. You can cancel it any time before the meeting, and if you vote yourself, your own vote counts.</div>
+                  <SubmitButton label="Assign proxy" small />
+                </form>
+              </details>
+            )) : <div className="hint" style={{ marginTop: 6 }}>{q.present} units present, {q.proxies} by proxy. <Link href={`/meetings/${agm.id}`}>Open the meeting</Link></div>}
+            {held.length > 0 && <div className="hint" style={{ marginTop: 6 }}>You hold proxies for {held.map((h) => h.unitCode).join(", ")}. Your votes on this AGM&apos;s resolutions count for those units too.</div>}
+          </div>
+        )}
         <div className="grid g2">{polls.map((p) => {
           const open = p.closesAt > now;
           const weighted = p.kind === "RESOLUTION";
@@ -35,7 +67,7 @@ export default async function Polls({ searchParams }: { searchParams: { ok?: str
           const passes = weighted && leader && leader.w > totalSqm / 2;
           return (
             <div className="card" key={p.id}>
-              <div className="row"><span className={"tag " + (weighted ? "t-warn" : "t-acc")}>{weighted ? "Resolution" : "Poll"}</span><span className={"tag " + (open ? "t-ok" : "t-mut")}>{open ? `Open until ${fmtDate(p.closesAt)}` : `Closed ${fmtDate(p.closesAt)}`}</span></div>
+              <div className="row"><span className={"tag " + (weighted ? "t-warn" : "t-acc")}>{weighted ? "Resolution" : "Poll"}</span>{p.meetingId && <span className="tag t-mut">AGM</span>}<span className={"tag " + (open ? "t-ok" : "t-mut")}>{open ? `Open until ${fmtDate(p.closesAt)}` : `Closed ${fmtDate(p.closesAt)}`}</span></div>
               <h3 style={{ marginTop: 8 }}>{p.question}</h3>
               {p.detail && <div className="hint" style={{ marginBottom: 8 }}>{p.detail}</div>}
               {owner && open ? (
@@ -49,7 +81,7 @@ export default async function Polls({ searchParams }: { searchParams: { ok?: str
                 <div className="stack" style={{ marginTop: 10, gap: 8 }}>
                   <div className="bar2">{tally.map((t, i) => <span key={t.id} style={{ width: `${(t.w / sum) * 100}%`, background: COLORS[i % COLORS.length] }} title={t.label} />)}</div>
                   {tally.map((t, i) => <div key={t.id} className="row" style={{ fontSize: 13 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: COLORS[i % COLORS.length] }} />{t.label}{mine === t.id && <span className="tag t-acc">your vote</span>}<span className="num" style={{ marginLeft: "auto" }}>{((t.w / sum) * 100).toFixed(0)}% · {t.n} units</span></div>)}
-                  <div className="hint">Turnout {turnout.toFixed(0)}% {weighted ? "of total floor area" : "of units"}{weighted ? ` · ${passes ? "has a majority of all area" : "no majority of all area yet"}` : ""}</div>
+                  <div className="hint">{p.votes.some((v) => v.byProxy) ? `${p.votes.filter((v) => v.byProxy).length} by proxy · ` : ""}Turnout {turnout.toFixed(0)}% {weighted ? "of total floor area" : "of units"}{weighted ? ` · ${passes ? "has a majority of all area" : "no majority of all area yet"}` : ""}</div>
                 </div>
               )}
             </div>);

@@ -5,6 +5,7 @@ import { PageHead } from "@/components/ui";
 import SubmitButton from "@/components/SubmitButton";
 import { fmtDate, fmtDateTime, nowManila } from "@/lib/format";
 import { createPass, revokePass } from "./actions";
+import SharePass from "@/components/SharePass";
 
 export const dynamic = "force-dynamic";
 const KIND: Record<string, string> = { GUEST: "Guest", DELIVERY: "Delivery", CONTRACTOR: "Contractor / worker", MOVE: "Move in / move out", STAY: "Short-stay guest (Airbnb)" };
@@ -29,7 +30,8 @@ export default async function Passes({ searchParams }: { searchParams: { new?: s
                 <span className="tag t-ok" style={{ alignSelf: "flex-start" }}>Pass ready</span>
                 <div className="pass-code">{fresh.code}</div>
                 <div>{KIND[fresh.kind]} · <b>{fresh.name}</b>{fresh.plate ? ` · ${fresh.plate}` : ""} → Unit {fresh.unit.code}</div>
-                <div className="hint">Valid {fmtDate(fresh.validFrom)}{fresh.validTo.getTime() - fresh.validFrom.getTime() > 86400000 ? ` to ${fmtDate(fresh.validTo)}` : ""}. Send your visitor this code or a screenshot of the QR.</div>
+                <div className="hint">Valid {fmtDate(fresh.validFrom)}{fresh.validTo.getTime() - fresh.validFrom.getTime() > 86400000 ? ` to ${fmtDate(fresh.validTo)}` : ""}. Send it straight to your visitor; they show the QR and the guard scans it.</div>
+                <SharePass code={fresh.code} name={fresh.name} />
               </div>
             </div>
           </div>
@@ -47,7 +49,7 @@ export default async function Passes({ searchParams }: { searchParams: { new?: s
         </details>
         <div className="grid g-7-5">
           <div className="card"><h3>New pass</h3>
-            <form action={createPass} style={{ marginTop: 8 }}>
+            <form action={createPass} style={{ marginTop: 8 }} encType="multipart/form-data">
               <div className="formgrid">
                 <div className="field"><label htmlFor="kind">Type</label><select id="kind" name="kind">{Object.entries(KIND).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
                 <div className="field"><label htmlFor="name">Visitor or courier name</label><input id="name" name="name" required placeholder="Juan dela Cruz / Lalamove" /></div>
@@ -55,6 +57,7 @@ export default async function Passes({ searchParams }: { searchParams: { new?: s
                 <div className="field"><label htmlFor="days">Valid for</label><select id="days" name="days">{[1, 2, 3, 5, 7, 14, 30].map((d) => <option key={d} value={d}>{d === 1 ? "1 day" : `${d} days`}</option>)}</select></div>
                 <div className="field"><label htmlFor="plate">Plate number (optional)</label><input id="plate" name="plate" placeholder="ABC 1234" /></div>
                 <div className="field"><label htmlFor="note">Note for the guard (optional)</label><input id="note" name="note" placeholder="Leave parcel at lobby" /></div>
+                <div className="field full"><label htmlFor="photo">Visitor&apos;s photo (optional)</label><input id="photo" type="file" name="photo" accept="image/jpeg,image/png,image/webp" /><div className="hint">Lets the guard match the face to the pass, so regular visitors like your yaya or driver get waved through. Under 300 KB.</div></div>
               </div>
               <SubmitButton label="Create pass" busy="Creating…" />
             </form>
@@ -63,7 +66,7 @@ export default async function Passes({ searchParams }: { searchParams: { new?: s
             <div className="list" style={{ marginTop: 6 }}>{passes.length ? passes.map((p) => {
               const active = p.validTo > now;
               return <div className="li" key={p.id}><span className={"tag " + (p.checkedIn ? "t-ok" : active ? "t-acc" : "t-mut")}>{p.checkedIn ? (p.checkedOut ? "Left" : "Arrived") : active ? "Active" : "Expired"}</span>
-                <div style={{ flex: 1 }}><b className="mono">{p.code}</b> · {p.name}<div className="hint">{KIND[p.kind]} · {fmtDate(p.validFrom)}{p.checkedIn ? ` · in ${fmtDateTime(p.checkedIn)}` : ""}</div></div>
+                <div style={{ flex: 1 }}><b className="mono">{p.code}</b> · {p.name}{p.photo ? " · photo on file" : ""}<div className="hint">{KIND[p.kind]} · {fmtDate(p.validFrom)}{p.checkedIn ? ` · in ${fmtDateTime(p.checkedIn)}` : ""}</div></div>
                 {active && !p.checkedIn && <form action={revokePass}><input type="hidden" name="id" value={p.id} /><button className="btn sm">Revoke</button></form>}</div>;
             }) : <div className="empty">No passes yet.</div>}</div>
           </div>

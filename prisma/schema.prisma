@@ -67,6 +67,7 @@ model User {
   notifyEmail     Boolean          @default(true)
   notifyMessenger Boolean          @default(false)
   messengerPsid   String? // Page-scoped ID, set when the owner links Messenger
+  viberId         String? // Viber user id, set when the owner links Viber
   deliveries      Delivery[]
   passes          Pass[]
   amenityBookings AmenityBooking[]
@@ -240,6 +241,7 @@ model ChatMessage {
   user      User     @relation(fields: [userId], references: [id])
   role      String // user | assistant
   content   String
+  channel   String   @default("APP") // APP | MESSENGER | VIBER
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
@@ -361,6 +363,7 @@ model Pass {
   checkedIn  DateTime?
   checkedOut DateTime?
   note       String?
+  photo      String? // optional small guest photo (data URL) so the guard can match the face
   createdAt  DateTime  @default(now())
 }
 
@@ -390,6 +393,7 @@ model Poll {
   question  String
   detail    String?
   kind      String       @default("POLL") // POLL (one vote per owner) | RESOLUTION (one vote per unit, weighted by sqm)
+  meetingId String? // AGM resolution: proxy holders for that meeting can vote for the units they hold
   closesAt  DateTime
   createdBy String
   createdAt DateTime     @default(now())
@@ -416,6 +420,7 @@ model Vote {
   userId    String
   user      User       @relation(fields: [userId], references: [id])
   weight    Decimal    @db.Decimal(10, 2)
+  byProxy   Boolean    @default(false)
   createdAt DateTime   @default(now())
 
   @@unique([pollId, unitId])
@@ -676,6 +681,153 @@ model PrivacyRequest {
 }
 
 /**
+ * ---------------- Wow features, round 2 ----------------
+ * userId / unitId here are plain ids (no relation) with the name or unit code copied in,
+ * so these tables stay independent of the core models.
+ */
+
+/**
+ * Board meetings and the AGM: AI-drafted agenda and minutes, plus action items.
+ */
+model Meeting {
+  id        String       @id @default(cuid())
+  title     String
+  kind      String       @default("BOARD") // BOARD | AGM
+  startsAt  DateTime
+  place     String       @default("Function room, 5th floor")
+  agenda    String? // markdown
+  notes     String? // raw notes taken during the meeting
+  minutes   String? // markdown, drafted from the notes
+  status    String       @default("PLANNED") // PLANNED | HELD
+  createdBy String
+  createdAt DateTime     @default(now())
+  actions   ActionItem[]
+  proxies   Proxy[]
+  attendees Attendance[]
+}
+
+model ActionItem {
+  id        String    @id @default(cuid())
+  meetingId String?
+  meeting   Meeting?  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  text      String
+  owner     String
+  due       DateTime?
+  status    String    @default("OPEN") // OPEN | DONE
+  doneAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+/**
+ * An owner names someone to vote for their unit at a meeting (usually the AGM).
+ */
+model Proxy {
+  id           String    @id @default(cuid())
+  meetingId    String
+  meeting      Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  unitId       String
+  unitCode     String
+  grantorId    String
+  holderUserId String? // set when the proxy holder has an account
+  holderName   String
+  createdAt    DateTime  @default(now())
+  revokedAt    DateTime?
+
+  @@unique([meetingId, unitId])
+}
+
+/**
+ * Units present at a meeting, for quorum.
+ */
+model Attendance {
+  id        String   @id @default(cuid())
+  meetingId String
+  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  unitId    String
+  unitCode  String
+  via       String // IN_PERSON | ONLINE
+  at        DateTime @default(now())
+
+  @@unique([meetingId, unitId])
+}
+
+/**
+ * Typhoon mode: one storm from prep alert to post-storm check-in.
+ */
+model StormEvent {
+  id        String         @id @default(cuid())
+  name      String
+  phase     String         @default("PREP") // PREP | CHECKIN | CLOSED
+  startedAt DateTime       @default(now())
+  checkinAt DateTime?
+  closedAt  DateTime?
+  createdBy String
+  checkins  StormCheckin[]
+}
+
+model StormCheckin {
+  id        String     @id @default(cuid())
+  stormId   String
+  storm     StormEvent @relation(fields: [stormId], references: [id], onDelete: Cascade)
+  unitId    String
+  unitCode  String
+  userId    String?
+  status    String // OK | HELP | DAMAGE
+  note      String?
+  createdAt DateTime   @default(now())
+
+  @@unique([stormId, unitId])
+}
+
+/**
+ * Community feed: posts by group, staff kudos, and events with RSVPs.
+ */
+model Post {
+  id         String     @id @default(cuid())
+  userId     String
+  authorName String
+  unitCode   String?
+  group      String     @default("General") // General | Pets | Sports | Parents | Kudos
+  body       String
+  staffName  String? // for kudos posts
+  hidden     Boolean    @default(false)
+  createdAt  DateTime   @default(now())
+  likes      PostLike[]
+}
+
+model PostLike {
+  id     String @id @default(cuid())
+  postId String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId String
+
+  @@unique([postId, userId])
+}
+
+model Event {
+  id        String      @id @default(cuid())
+  title     String
+  detail    String?
+  group     String      @default("General")
+  startsAt  DateTime
+  place     String
+  createdBy String
+  hostName  String
+  createdAt DateTime    @default(now())
+  rsvps     EventRsvp[]
+}
+
+model EventRsvp {
+  id      String @id @default(cuid())
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId  String
+  name    String
+
+  @@unique([eventId, userId])
+}
+
+/**
  * ---------------- Guard rounds and meter readings ----------------
  */
 
@@ -711,19 +863,20 @@ model MeterReading {
  */
 
 model Asset {
-  id            String        @id @default(cuid())
-  tag           String        @unique // printed on the fixture, e.g. LT-B12-HALL-2
+  id            String          @id @default(cuid())
+  tag           String          @unique // printed on the fixture, e.g. LT-B12-HALL-2
   name          String
   category      String // Lighting | Aircon | Pump | Elevator | Electrical | Plumbing | Safety | Fixture
   location      String // common area or unit code, same wording as work orders
   installedAt   DateTime
   lifeMonths    Int // expected life
   warrantyUntil DateTime?
-  cost          Decimal       @db.Decimal(12, 2)
+  cost          Decimal         @db.Decimal(12, 2)
   vendor        String?
-  status        String        @default("OK") // OK | FAULTY | RETIRED
+  status        String          @default("OK") // OK | FAULTY | RETIRED
   replacements  Replacement[]
-  createdAt     DateTime      @default(now())
+  sensors       SensorReading[]
+  createdAt     DateTime        @default(now())
 }
 
 model StockItem {
@@ -818,4 +971,18 @@ model Quote {
   note      String?
   addedBy   String
   createdAt DateTime        @default(now())
+}
+
+/**
+ * IoT readings from elevator and genset sensors (vibration, door faults, battery, temperature, run hours).
+ */
+model SensorReading {
+  id      String   @id @default(cuid())
+  assetId String
+  asset   Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  metric  String // VIBRATION (mm/s) | DOOR_FAULTS (per day) | BATTERY_V | COOLANT_C | RUN_HOURS | TRIPS (per day)
+  value   Float
+  at      DateTime @default(now())
+
+  @@index([assetId, metric, at])
 }

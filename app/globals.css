@@ -617,6 +617,21 @@ html,body{margin:0}
 .scanning{position:relative;overflow:hidden}
 .scanning::after{content:"";position:absolute;left:0;right:0;height:40%;top:-40%;background:linear-gradient(180deg,transparent,rgba(60,196,201,.45),transparent);animation:scan 1.4s linear infinite}
 @keyframes scan{to{top:100%}}
+/* Visitor pass scan + public pass */
+.qrscan{position:relative;max-width:360px}.qrscan video{width:100%;border-radius:12px;background:#000;aspect-ratio:4/3;object-fit:cover}.qrscan .btn{position:absolute;right:8px;top:8px}
+.guestpass{min-height:100vh;padding:16px;background:var(--bg)}
+.guest-face{width:88px;height:88px;border-radius:12px;object-fit:cover;border:1px solid var(--line)}
+/* Messenger / Viber phone mock-up */
+.phone-chat{max-width:380px;border:1px solid var(--line);border-radius:26px;overflow:hidden;display:flex;flex-direction:column;height:540px;background:var(--panel);box-shadow:var(--shadow, 0 10px 30px rgba(0,0,0,.08))}
+.phone-chat .pc-top{padding:10px 14px;display:flex;flex-direction:column;gap:2px;color:#fff}.phone-chat .pc-top span{font-size:11.5px;opacity:.85}
+.phone-chat.fbm .pc-top{background:linear-gradient(135deg,#0866ff,#a033ff)}.phone-chat.viber .pc-top{background:#7360f2}
+.phone-chat .pc-top .seg2{align-self:flex-start;margin-bottom:6px;background:rgba(255,255,255,.18)}.phone-chat .pc-top .seg2 button{color:#fff}.phone-chat .pc-top .seg2 button.on{background:#fff;color:#222}
+.pc-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--panel-2)}
+.pc-b{max-width:82%;padding:8px 12px;border-radius:18px;font-size:13.5px;line-height:1.45;white-space:pre-wrap}
+.pc-b.bot{align-self:flex-start;background:var(--panel);border:1px solid var(--line)}
+.fbm .pc-b.me{align-self:flex-end;background:#0866ff;color:#fff}.viber .pc-b.me{align-self:flex-end;background:#7360f2;color:#fff}
+.pc-chips{display:flex;gap:6px;overflow-x:auto;padding:8px 10px;border-top:1px solid var(--line)}.pc-chips button{flex:none;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:5px 10px;font-size:12px;cursor:pointer;color:inherit}
+.pc-in{display:flex;gap:6px;padding:8px 10px;border-top:1px solid var(--line)}.pc-in input{flex:1;border:1px solid var(--line);border-radius:999px;padding:8px 12px;background:var(--panel-2);color:inherit}
 
 /* ---------- Guard rounds ---------- */
 .round-start{text-align:left}
@@ -728,3 +743,25 @@ h2.section-h{font-size:17px;margin:6px 0 0}
 .fixed-top .big{color:var(--ok);font-size:34px}
 .fixed-row{display:flex;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
 .fi-i.ok{background:var(--ok-soft);color:var(--ok)}
+/* Meetings */
+.chk{width:24px;height:24px;border-radius:7px;border:2px solid var(--line);background:var(--panel);color:#fff;font-weight:800;line-height:1;cursor:pointer;flex:none}.chk.on{background:var(--ok);border-color:var(--ok)}
+.doc{font-size:13.5px;line-height:1.55;margin-top:6px}.doc h2{font-size:14.5px;margin:12px 0 4px}.doc h1{font-size:16px}
+.quorum{position:relative;height:16px;border-radius:8px;background:var(--panel-2);border:1px solid var(--line);display:flex;overflow:hidden;margin:10px 0 6px}.quorum .qp{background:#0072B2}.quorum .qx{background:#56B4E9}.quorum b{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--fg)}
+/* Neighbours */
+.post .avatar{width:36px;height:36px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:700;font-size:13px;flex:none}
+.kudos-to{margin-top:8px;padding:6px 10px;border-radius:8px;background:var(--ok-soft);color:var(--ok);font-size:13px;display:inline-block}
+.like{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:4px 12px;cursor:pointer;color:var(--muted);font-size:13px}.like.on{color:#e11d48;border-color:#fecdd3}
+.evdate{width:52px;flex:none;text-align:center;border:1px solid var(--line);border-radius:10px;padding:6px 0;background:var(--panel-2)}.evdate b{display:block;font-size:20px;font-family:var(--display)}.evdate span{font-size:11px;text-transform:uppercase;color:var(--muted)}
+/* Typhoon mode */
+.storm-bar{display:flex;gap:14px;align-items:center;flex-wrap:wrap}.storm-bar.on{border-color:var(--bad);background:linear-gradient(90deg,var(--bad-soft),var(--panel) 60%)}
+.ci-btns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.ci{display:flex;flex-direction:column;align-items:center;gap:2px;padding:16px 8px;border-radius:14px;border:2px solid var(--line);background:var(--panel);cursor:pointer;font-size:26px;color:inherit}
+.ci b{font-size:15px}.ci span{font-size:11.5px;color:var(--muted)}.ci.ok:hover{border-color:#009E73}.ci.dmg:hover{border-color:#E69F00}.ci.help{border-color:#fbcfc0}.ci.help:hover{border-color:#D55E00}
+.ci-towers{display:grid;grid-template-columns:1fr 1fr;gap:16px}.ci-grid{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+.ci-row{display:grid;grid-template-columns:24px repeat(4,1fr);gap:2px;align-items:center}.ci-fl{font-size:10px;color:var(--muted);text-align:right;padding-right:4px}
+.ci-cell{height:9px;border-radius:2px;background:var(--panel-2);border:1px solid var(--line)}.ci-cell.ph{grid-column:span 2}
+.storm-home{display:flex;gap:12px;align-items:center;border-color:var(--bad)!important;background:linear-gradient(90deg,var(--bad-soft),var(--panel) 70%)}
+/* Equipment health */
+.eq-ring{--p:80;--c:#009E73;width:54px;height:54px;border-radius:50%;flex:none;display:grid;place-items:center;background:conic-gradient(var(--c) calc(var(--p)*1%),var(--panel-2) 0)}
+.eq-ring b{width:42px;height:42px;border-radius:50%;background:var(--panel);display:grid;place-items:center;font-family:var(--display);font-size:15px;color:var(--fg)}
+.eq-metrics{display:flex;flex-direction:column;gap:6px;margin:10px 0}.eq-m{display:flex;justify-content:space-between;align-items:center;gap:10px}.eq-m>div{color:var(--fg)}.eq-m .hint{display:block}
