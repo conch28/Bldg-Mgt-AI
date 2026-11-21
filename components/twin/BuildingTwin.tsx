@@ -7,6 +7,8 @@ import type { TwinData, TwinState, TwinTicket, TwinUnit, TwinZone } from "@/lib/
 import type { TwinScene, Paint } from "./scene";
 import { SITE, STACKS, TOWERS, towerLabel } from "@/lib/skyland";
 import { peso, fmtDate } from "@/lib/format";
+import type { Weather } from "@/lib/weather";
+import { wxIcon, wxWord } from "@/lib/weather";
 
 type Mode = "tickets" | "happy" | "occ" | "market" | "dues";
 type Cat = { k: string; label: string; color: string };
@@ -49,7 +51,7 @@ function lowEndDevice() {
   try { const c = document.createElement("canvas"); return !(c.getContext("webgl2") || c.getContext("webgl")); } catch { return true; }
 }
 
-export default function BuildingTwin({ data, staff, compact }: { data: TwinData; staff: boolean; compact?: boolean }) {
+export default function BuildingTwin({ data, staff, compact, weather }: { data: TwinData; staff: boolean; compact?: boolean; weather?: Weather }) {
   const router = useRouter();
   const host = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<TwinScene | null>(null);
@@ -194,7 +196,8 @@ export default function BuildingTwin({ data, staff, compact }: { data: TwinData;
       </div>
 
       <div className="twin-body">
-        <div className="twin-stage">
+        <div className={"twin-stage" + (weather && (weather.risk === "storm" || weather.risk === "rain") && motion ? " wx-raining" + (weather.risk === "storm" ? " heavy" : "") : "")}>
+          {weather && <WeatherChip w={weather} />}
           {view === "3d" && !failed && (
             <>
               <div ref={host} className="twin-canvas" aria-label={`3D model of ${data.building}. Use the list beside it to open each unit.`} role="img" />
@@ -412,5 +415,19 @@ function Stack2D({ data, mode, sel, onPick, color, motion }: { data: TwinData; m
         ))}
       </div>
     </div>
+  );
+}
+
+/** Weather over the 3D view: today's conditions and, when it matters, the coming storm. */
+function WeatherChip({ w }: { w: Weather }) {
+  const d = w.riskDay ?? w.days[0];
+  const code = w.now?.code ?? d?.code ?? 2;
+  return (
+    <a href="/advisor#weather" className={"twin-wx" + (w.risk !== "ok" ? " " + w.risk : "")} title={w.headline}>
+      <span aria-hidden="true">{wxIcon(code)}</span>
+      <span><b className="num">{w.now ? `${Math.round(w.now.temp)}°C` : d ? `${Math.round(d.max)}°` : ""}</b> {w.now ? wxWord(w.now.code) : "Makati"}
+        {w.risk !== "ok" && d && <><br /><b className="twin-wx-alert">{w.risk === "storm" ? "Typhoon prep" : w.risk === "rain" ? "Heavy rain" : "Heat"}: {Math.round(d.rain)} mm{d.gust >= 40 ? `, ${Math.round(d.gust)} km/h` : ""}</b></>}
+      </span>
+    </a>
   );
 }

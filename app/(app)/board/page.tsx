@@ -8,6 +8,9 @@ import { HappinessHero } from "@/components/Happiness";
 import BuildingTwin from "@/components/twin/BuildingTwin";
 import { EarlyWarnings, FixLeaderboard } from "@/components/Insights";
 import { buildingTwin } from "@/lib/building";
+import { getWeather } from "@/lib/weather";
+import { WeatherStrip } from "@/components/Weather";
+import { controlFlags, savingsThisYear } from "@/lib/procurement";
 import { collectionTrend, overdueAccounts, slaStats, budgetFor, latestClosedPeriod } from "@/lib/metrics";
 import { peso, pesoK, monthLabel, monthLong, fmtDateTime, nowManila, currentPeriod } from "@/lib/format";
 
@@ -23,7 +26,7 @@ export default async function Board() {
     prisma.auditLog.findMany({ where: { action: { in: ["payment", "work_order", "booking", "reminder", "report", "resident follow-up", "announcement sent", "urgent alert"] } }, orderBy: { createdAt: "desc" }, take: 6, include: { user: true } }),
     prisma.bill.aggregate({ where: { period: currentPeriod() }, _sum: { amount: true, paid: true } }),
   ]);
-  const twin = await buildingTwin(u.role);
+  const [twin, weather, flags, saved] = await Promise.all([buildingTwin(u.role), getWeather(), controlFlags(), savingsThisYear()]);
   const last = trend.find((t) => t.period === closed);
   const first = trend[0];
   const overBudget = budget.lines.filter((l) => Number(l.actual) > Number(l.budget) * 1.02);
@@ -35,7 +38,8 @@ export default async function Board() {
       <main className="view">
         <Tip id="board-overview" title="Your building at a glance.">Green means on track, amber needs a look, red needs a decision. Tap any number to see the detail behind it.</Tip>
         <HappinessHero />
-        <BuildingTwin data={twin} staff={u.role !== "BOARD"} compact />
+        {weather.risk !== "ok" && <WeatherStrip w={weather} />}
+        <BuildingTwin data={twin} staff={u.role !== "BOARD"} compact weather={weather} />
         <div className="grid g4">
           <Kpi k={`${monthLong(closed)} collections`} v={`${last?.rate.toFixed(1) ?? "–"}%`} d={first && last ? <span className={last.rate >= first.rate ? "up" : "down"}>{last.rate >= first.rate ? "▲" : "▼"} {Math.abs(last.rate - first.rate).toFixed(1)} pts in 12 months</span> : null} />
           <Kpi k="Open work orders" v={openWO} d={<><span className="up">{sla.pct.toFixed(0)}% on time</span> · {escalated.length} escalated</>} />
@@ -53,6 +57,8 @@ export default async function Board() {
                 <div className="li" key={l.id}><span className="dot" style={{ background: "var(--warn)" }} /><div><b>{l.category} was {((Number(l.actual) / Number(l.budget) - 1) * 100).toFixed(1)}% over budget in {monthLong(closed)}.</b> {l.note}</div></div>
               ))}
               <div className="li"><span className="dot" style={{ background: "var(--ok)" }} /><div><b>{monthLabel(currentPeriod())} dues: {peso(Number(nov._sum.paid ?? 0))} collected so far ({novPct.toFixed(0)}%).</b> {overdue.filter((o) => o.days > 60).length} units are more than 60 days late, owing {peso(overdue.filter((o) => o.days > 60).reduce((s, o) => s + o.amount, 0))}.</div></div>
+              {flags.length > 0 && <div className="li"><span className="dot" style={{ background: flags.some((f) => f.level === "high") ? "var(--bad)" : "var(--warn)" }} /><div><b>{flags.length} spending red flag{flags.length > 1 ? "s" : ""}</b>, {peso(flags.reduce((s, f) => s + f.atStake, 0))} at stake. Top: {flags[0].title}. <Link href="/procurement?tab=controls" style={{ color: "var(--accent)" }}>Review</Link></div></div>}
+              <div className="li"><span className="dot" style={{ background: "var(--ok)" }} /><div><b>{peso(saved.total)} saved this year</b> by choosing cheaper quotes and claiming warranties. <Link href="/advisor" style={{ color: "var(--accent)" }}>More ways to save</Link></div></div>
               <div className="li"><span className="dot" style={{ background: "var(--accent)" }} /><div><b>{sla.closed} repairs closed in the last 30 days</b>, {sla.pct.toFixed(0)}% within deadline, average owner rating {sla.rating.toFixed(1)}/5.</div></div>
             </div>
           </div>

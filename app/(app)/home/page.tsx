@@ -7,6 +7,8 @@ import { PulseCard } from "@/components/Happiness";
 import { InstallApp } from "@/components/Pwa";
 import Tip from "@/components/Tip";
 import { peso, fmtDate, fmtDateTime, monthLong, nowManila } from "@/lib/format";
+import { WeatherCard } from "@/components/Weather";
+import { getWeather } from "@/lib/weather";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +40,10 @@ export default async function Home({ searchParams }: { searchParams: { thanks?: 
     prisma.amenityBooking.findMany({ where: { userId: u.id, status: "CONFIRMED", start: { gte: now } }, orderBy: { start: "asc" }, take: 3, include: { amenity: true } }),
     prisma.pass.findMany({ where: { userId: u.id, validTo: { gte: now } }, orderBy: { validFrom: "asc" }, take: 3 }),
     prisma.poll.findMany({ where: { closesAt: { gte: now }, votes: { none: { userId: u.id } } }, take: 2 }),
+  ]);
+  const [weather, fixed] = await Promise.all([
+    getWeather(),
+    prisma.workOrder.findMany({ where: { unitId: null, status: "DONE", closedAt: { gte: new Date(now.getTime() - 7 * 86400000) }, NOT: { source: "Weather" } }, orderBy: { closedAt: "desc" }, take: 40, select: { id: true, title: true, location: true, source: true, closedAt: true, createdAt: true } }),
   ]);
   const pulsed = await prisma.pulse.findFirst({ where: { userId: u.id, kind: "MONTHLY", createdAt: { gte: new Date(now.getTime() - 25 * 86400000) } } });
   const due = bills.reduce((s, b) => s + Number(b.amount) - Number(b.paid), 0);
@@ -79,6 +85,8 @@ export default async function Home({ searchParams }: { searchParams: { thanks?: 
           <Link key={q.href} href={q.href} className={"act " + (q.cls ?? "")}><span className="ti"><Icon name={q.icon} /></span><b>{q.t}</b>{q.badge ? <i className="badge">{q.badge}</i> : null}</Link>))}
         </nav>
 
+        {weather.risk !== "ok" && <WeatherCard w={weather} resident compact />}
+
         {!pulsed && !searchParams.thanks && <PulseCard />}
 
         {needs.length > 0 && <>
@@ -87,10 +95,21 @@ export default async function Home({ searchParams }: { searchParams: { thanks?: 
             <Link key={i} href={r.href}><span className={"fi-i " + r.tone}><Icon name={r.icon} /></span><span className="fi-t"><b>{r.t}</b><span>{r.s}</span></span><span className="chev">›</span></Link>))}</div></div>
         </>}
 
+        {fixed.length > 0 && <>
+          <div className="section-h"><h2>Fixed around the building</h2><span className="hint">this week</span></div>
+          <div className="card fixed-card">
+            <div className="fixed-top"><b className="big num">{fixed.length}</b><span>common-area problems fixed in the last 7 days, {fixed.filter((w) => w.source === "Guard round").length} of them spotted by our guards on their rounds before anyone had to report them.</span></div>
+            <div className="feed">{fixed.slice(0, 4).map((w) => (
+              <div className="fixed-row" key={w.id}><span className="fi-i ok"><Icon name="check" /></span><span className="fi-t"><b>{w.title}</b><span>{w.location} · fixed {fmtDate(w.closedAt!)}{w.source === "Guard round" ? " · spotted on guard rounds" : ""}</span></span></div>))}</div>
+          </div>
+        </>}
+
         <div className="section-h"><h2>Building updates</h2><Link href="/updates">See all{unread ? ` (${unread} new)` : ""}</Link></div>
         <div className="card" style={{ paddingTop: 2, paddingBottom: 2 }}><div className="feed">{updates.length ? updates.slice(0, 3).map((d) => (
           <Link href="/updates" key={d.id}><span className={"fi-i " + (d.announcement.kind === "URGENT" ? "bad" : "acc")}><Icon name={d.announcement.kind === "URGENT" ? "alert" : "mega"} /></span>
             <span className="fi-t"><b>{!d.readAt && <span className="dot-new" aria-label="New" />}{d.announcement.title}</b><span>{clip((tl && d.announcement.bodyTl) || d.announcement.bodyEn)}</span></span><span className="chev">›</span></Link>)) : <div className="empty">No updates yet.</div>}</div></div>
+
+        {weather.risk === "ok" && <WeatherCard w={weather} resident compact />}
 
         <InstallApp />
       </main>
