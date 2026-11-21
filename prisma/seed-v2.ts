@@ -25,9 +25,9 @@ export async function seedV2({ prisma, rnd, hash, buildingId, units, owner, mana
 
   console.log("Creating guard and owner logins…");
   await prisma.user.create({ data: { email: "guard@skyland.test", name: "Mang Ernie (Lobby guard)", role: "GUARD", passwordHash: hash, buildingId } });
-  await prisma.user.update({ where: { id: owner.id }, data: { language: "EN", notifyMessenger: true, messengerPsid: "demo-psid-12B" } });
+  await prisma.user.update({ where: { id: owner.id }, data: { language: "EN", notifyMessenger: true, messengerPsid: "demo-psid-1202B" } });
   // 140 more owners with portal logins (the rest of the 400 units have not registered yet)
-  const candidates = units.filter((u) => u.code !== "12B").sort(() => rnd() - 0.5).slice(0, 140);
+  const candidates = units.filter((u) => u.code !== "1202B").sort(() => rnd() - 0.5).slice(0, 115);
   for (const [i, u] of candidates.entries()) {
     const first = pick(["Maria", "Jose", "Carmela", "Miguel", "Liza", "Ramon", "Bea", "Paolo", "Grace", "Mark", "Joy", "Rico", "Celia", "Andrew", "Patricia", "Kevin"]);
     const name = `${first} ${(u.ownerName ?? "Owner").split(". ").pop()}`;
@@ -69,13 +69,13 @@ export async function seedV2({ prisma, rnd, hash, buildingId, units, owner, mana
   }
   // ticket updates for Ana
   for (const [t, b, d] of [["WO update: technician assigned", "Rudy M. is assigned to your ticket (aircon not cooling) and will visit today between 2 and 4 PM.", -0.2], ["Payment received", "We received ₱4,410 for October 2026 dues via GCash. Salamat po! Reference GC-8821-4410.", -24]] as const) {
-    const a = await prisma.announcement.create({ data: { kind: "TICKET", category: "Automatic update", title: t, bodyEn: b, smsEn: b, audience: "UNITS:12B", channels: ["APP", "SMS"], status: "SENT", sentAt: at(d, 11), createdBy: "Automation", createdAt: at(d, 11) } });
-    await prisma.delivery.createMany({ data: [{ announcementId: a.id, userId: owner.id, unitCode: "12B", channel: "APP", status: "SENT", info: "In-app", createdAt: at(d, 11) }, { announcementId: a.id, userId: owner.id, unitCode: "12B", channel: "SMS", to: owner.phone, status: "SENT", info: "Delivered", createdAt: at(d, 11) }] });
+    const a = await prisma.announcement.create({ data: { kind: "TICKET", category: "Automatic update", title: t, bodyEn: b, smsEn: b, audience: "UNITS:1202B", channels: ["APP", "SMS"], status: "SENT", sentAt: at(d, 11), createdBy: "Automation", createdAt: at(d, 11) } });
+    await prisma.delivery.createMany({ data: [{ announcementId: a.id, userId: owner.id, unitCode: "1202B", channel: "APP", status: "SENT", info: "In-app", createdAt: at(d, 11) }, { announcementId: a.id, userId: owner.id, unitCode: "1202B", channel: "SMS", to: owner.phone, status: "SENT", info: "Delivered", createdAt: at(d, 11) }] });
   }
   // waiting for approval + scheduled
   await prisma.announcement.create({ data: { kind: "ROUTINE", category: "Assembly / meeting notice", title: "Notice of Annual General Assembly, January 24, 2027", aiDrafted: true, createdBy: manager.name, status: "PENDING_APPROVAL", audience: "ALL", channels: ["APP", "EMAIL", "SMS"],
-    bodyEn: "The Annual General Assembly of Skyland Tower Condominium Corporation will be held on Saturday, January 24, 2027, 2:00 PM, at the 5th floor function room.\n\nAgenda\n1. Call to order and proof of quorum\n2. Approval of the 2026 minutes\n3. President's report and 2026 audited financials\n4. 2027 budget and dues\n5. Election of three (3) board members\n6. Other matters\n\nCan't attend? Submit a proxy form from the Documents page by [ADD: proxy deadline]. Only owners in good standing may vote.",
-    bodyTl: "Gaganapin po ang Annual General Assembly ng Skyland Tower Condominium Corporation sa Sabado, January 24, 2027, 2:00 PM, sa 5th floor function room.\n\nAgenda\n1. Call to order at quorum\n2. Approval ng 2026 minutes\n3. President's report at 2026 audited financials\n4. 2027 budget at dues\n5. Election ng tatlong (3) board members\n6. Iba pang usapin\n\nHindi makakadalo? Mag-submit ng proxy form mula sa Documents page bago ang [ADD: proxy deadline]. Ang mga owner na updated sa dues lang ang pwedeng bumoto.",
+    bodyEn: "The Annual General Assembly of Skyland Plaza Condominium Corporation will be held on Saturday, January 24, 2027, 2:00 PM, at the 5th floor function room.\n\nAgenda\n1. Call to order and proof of quorum\n2. Approval of the 2026 minutes\n3. President's report and 2026 audited financials\n4. 2027 budget and dues\n5. Election of three (3) board members\n6. Other matters\n\nCan't attend? Submit a proxy form from the Documents page by [ADD: proxy deadline]. Only owners in good standing may vote.",
+    bodyTl: "Gaganapin po ang Annual General Assembly ng Skyland Plaza Condominium Corporation sa Sabado, January 24, 2027, 2:00 PM, sa 5th floor function room.\n\nAgenda\n1. Call to order at quorum\n2. Approval ng 2026 minutes\n3. President's report at 2026 audited financials\n4. 2027 budget at dues\n5. Election ng tatlong (3) board members\n6. Iba pang usapin\n\nHindi makakadalo? Mag-submit ng proxy form mula sa Documents page bago ang [ADD: proxy deadline]. Ang mga owner na updated sa dues lang ang pwedeng bumoto.",
     smsEn: "Skyland AGA: Sat, Jan 24, 2027, 2 PM, 5F function room. Proxy forms in the owner portal. Details by email.", smsTl: "Skyland AGA: Sab, Jan 24, 2027, 2 PM, 5F function room. Proxy forms nasa owner portal. Details sa email." } });
   await prisma.announcement.create({ data: { kind: "ROUTINE", category: "Event", title: "Kids' Christmas party, Dec 14", createdBy: manager.name, approvedBy: manager.name, status: "SCHEDULED", scheduledAt: at(5, 9), audience: "ALL", channels: ["APP", "EMAIL", "MESSENGER"], aiDrafted: true,
     bodyEn: "Our Kids' Christmas party is on Sunday, Dec 14, 3 PM to 6 PM at the function room. Games, a magic show and loot bags for kids 12 and under. Free for residents. Please register your kids at the admin office by Dec 10.",
@@ -84,7 +84,7 @@ export async function seedV2({ prisma, rnd, hash, buildingId, units, owner, mana
   console.log("Creating resident pulses and helpdesk history…");
   const C: Record<string, [number, string][]> = {
     Repairs: [[5, "Aircon fixed the same day. Ang bilis!"], [5, "Technician was polite and cleaned up after."], [4, "Leak fixed, took two visits though."], [2, "Still waiting for my bathroom exhaust fan. Third follow-up na."], [5, "Love that I can report problems in chat at 11 PM."]],
-    Elevators: [[2, "Elevator 2 down again during rush hour. Hassle for seniors."], [3, "Long wait for elevators 7-9 AM."], [4, "Elevators better since the maintenance last month."], [1, "Stuck in Elevator 3 for 10 minutes. Scary."]],
+    Elevators: [[2, "Elevator 2 down again during rush hour. Hassle for seniors."], [3, "Long wait for elevators 7-9 AM."], [4, "Elevators better since the maintenance last month."], [1, "Stuck in Elevator 3 (Tower B) for 10 minutes. Scary."]],
     Cleanliness: [[5, "Lobby and hallways are spotless lately."], [4, "Garbage room much better now."], [2, "Hallway on 23F smells, basura not collected on time."], [5, "Malinis na ang pool area, salamat!"]],
     Security: [[5, "Visitor passes are great, guards don't call me anymore."], [4, "Guards are friendly and alert."], [3, "Delivery riders sometimes go straight up without checking."]],
     Water: [[2, "Low water pressure in the morning on high floors."], [4, "Thanks for the advance notice on the water interruption."], [3, "Water was off longer than announced."]],
@@ -117,7 +117,7 @@ export async function seedV2({ prisma, rnd, hash, buildingId, units, owner, mana
     }
   }
   // three fresh unhappy ratings still waiting for a call
-  const fresh: [string, number, string, string][] = [["Elevators", 1, "Stuck in Elevator 3 for 10 minutes. Scary.", "2026-11-20T19:10:00+08:00"], ["Repairs", 2, "Still waiting for my bathroom exhaust fan. Third follow-up na.", "2026-11-21T08:40:00+08:00"], ["Noise", 2, "Renovation noise next door even on Sunday.", "2026-11-19T16:05:00+08:00"]];
+  const fresh: [string, number, string, string][] = [["Elevators", 1, "Stuck in Elevator 3 (Tower B) for 10 minutes. Scary.", "2026-11-20T19:10:00+08:00"], ["Repairs", 2, "Still waiting for my bathroom exhaust fan. Third follow-up na.", "2026-11-21T08:40:00+08:00"], ["Noise", 2, "Renovation noise next door even on Sunday.", "2026-11-19T16:05:00+08:00"]];
   for (const [topic, score, comment, when] of fresh) { const o = pick(reg); pulses.push({ userId: o.id, unitCode: o.units[0].code, kind: "MONTHLY", score, comment, topic, sentiment: "NEGATIVE", createdAt: new Date(when) }); }
   await prisma.pulse.createMany({ data: pulses });
   // helpdesk chat history (AI answers questions 24/7)
@@ -139,9 +139,9 @@ export async function seedV2({ prisma, rnd, hash, buildingId, units, owner, mana
 
   console.log("Creating amenities, bookings and passes…");
   const AM = [
-    { name: "Swimming pool", detail: "25 m lap pool and kiddie pool, 6th floor", capacity: 30, fee: 0, openHour: 6, closeHour: 21, slotHours: 2, closedDow: 1, rules: "Proper swimwear. Kids under 12 with an adult." },
+    { name: "Swimming pool", detail: "Lap pool and kiddie pool, podium deck (5th level)", capacity: 30, fee: 0, openHour: 6, closeHour: 21, slotHours: 2, closedDow: 1, rules: "Proper swimwear. Kids under 12 with an adult." },
     { name: "Function room", detail: "Air-conditioned, 60 seats, pantry, sound system", capacity: 60, fee: 3500, openHour: 9, closeHour: 22, slotHours: 4, closedDow: null, rules: "Book 3 days ahead. Clean-up by 10 PM." },
-    { name: "Gym", detail: "Cardio and free weights, 6th floor", capacity: 12, fee: 0, openHour: 5, closeHour: 23, slotHours: 1, closedDow: null, rules: "Wipe equipment after use." },
+    { name: "Gym", detail: "Cardio and free weights, 5th floor", capacity: 12, fee: 0, openHour: 5, closeHour: 23, slotHours: 1, closedDow: null, rules: "Wipe equipment after use." },
     { name: "Basketball court", detail: "Half court, roof deck", capacity: 14, fee: 300, openHour: 6, closeHour: 21, slotHours: 2, closedDow: null, rules: "Rubber shoes only." },
     { name: "Roof deck grill area", detail: "Two grill stations, 20 seats, city view", capacity: 20, fee: 1500, openHour: 16, closeHour: 22, slotHours: 3, closedDow: null, rules: "Charcoal provided by the admin office only." },
     { name: "Karaoke room", detail: "Soundproof, 10 seats, 5th floor", capacity: 10, fee: 500, openHour: 10, closeHour: 22, slotHours: 2, closedDow: null, rules: "Until 10 PM only, please." },
@@ -193,7 +193,7 @@ export async function seedV2({ prisma, rnd, hash, buildingId, units, owner, mana
   const withOwner = unitsNow.filter((u) => u.ownerId);
   const poll = async (q: string, detail: string, kind: string, closes: number, opts: [string, number][], turnout: number) => {
     const p = await prisma.poll.create({ data: { question: q, detail, kind, closesAt: at(closes, 23), createdBy: "Board President", createdAt: at(closes - 14), options: { create: opts.map(([label]) => ({ label })) } }, include: { options: true } });
-    const voters = withOwner.filter((u) => u.code !== "12B").sort(() => rnd() - 0.5).slice(0, Math.round(withOwner.length * turnout));
+    const voters = withOwner.filter((u) => u.code !== "1202B").sort(() => rnd() - 0.5).slice(0, Math.round(withOwner.length * turnout));
     const total = opts.reduce((s, [, w]) => s + w, 0);
     await prisma.vote.createMany({ data: voters.map((u) => { let r = rnd() * total, idx = 0; while (r > opts[idx][1]) { r -= opts[idx][1]; idx++; } return { pollId: p.id, optionId: p.options[idx].id, unitId: u.id, userId: u.ownerId!, weight: kind === "RESOLUTION" ? u.sqm : 1, createdAt: at(closes - 10 + Math.floor(rnd() * 9)) }; }) });
   };
@@ -213,7 +213,7 @@ export async function seedV2({ prisma, rnd, hash, buildingId, units, owner, mana
   await prisma.pMTask.createMany({ data: [
     { asset: "Fire pump", task: "Weekly churn test", frequencyDays: 7, lastDone: at(-6), nextDue: at(1), assignee: "Rudy M.", compliance: true },
     { asset: "Genset", task: "No-load run and battery check", frequencyDays: 7, lastDone: at(-8), nextDue: at(-1), vendor: "PowerGen Services" },
-    { asset: "Elevators 1-4", task: "Monthly preventive maintenance", frequencyDays: 30, lastDone: at(-26), nextDue: at(4), vendor: "LiftCare Elevators" },
+    { asset: "Elevators 1-4 (2 per tower)", task: "Monthly preventive maintenance", frequencyDays: 30, lastDone: at(-26), nextDue: at(4), vendor: "LiftCare Elevators" },
     { asset: "Water tanks", task: "Cleaning and disinfection", frequencyDays: 180, lastDone: at(-172), nextDue: at(8), vendor: "AquaSafe Water Systems", compliance: true },
     { asset: "Fire alarm & sprinklers", task: "Quarterly inspection", frequencyDays: 90, lastDone: at(-60), nextDue: at(30), vendor: "FireTech Philippines", compliance: true },
     { asset: "Fire extinguishers", task: "Monthly pressure check", frequencyDays: 30, lastDone: at(-18), nextDue: at(12), assignee: "Jun P.", compliance: true },
@@ -221,7 +221,7 @@ export async function seedV2({ prisma, rnd, hash, buildingId, units, owner, mana
     { asset: "Pest control", task: "Common-area treatment", frequencyDays: 30, lastDone: at(-15), nextDue: at(15), vendor: "GreenShield Pest Control" },
     { asset: "Transformer", task: "Thermal scan and oil test", frequencyDays: 365, lastDone: at(-350), nextDue: at(15), vendor: "PowerGen Services" },
     { asset: "Roof deck", task: "Drain and waterproofing check", frequencyDays: 90, lastDone: at(-95), nextDue: at(-5), assignee: "Rudy M." },
-    { asset: "Elevators 1-4", task: "Annual DOLE load test and permit", frequencyDays: 365, lastDone: at(-340), nextDue: at(25), vendor: "LiftCare Elevators", compliance: true },
+    { asset: "Elevators 1-4 (2 per tower)", task: "Annual DOLE load test and permit", frequencyDays: 365, lastDone: at(-340), nextDue: at(25), vendor: "LiftCare Elevators", compliance: true },
     { asset: "CCTV", task: "Camera and recorder check", frequencyDays: 30, lastDone: at(-10), nextDue: at(20), assignee: "Security" },
   ] });
 }

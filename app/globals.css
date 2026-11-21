@@ -543,13 +543,17 @@ html,body{margin:0}
 .twin-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 @keyframes twinPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.9)}}
 .stack2d{padding:12px 10px 10px;display:flex;flex-direction:column;gap:2px;max-height:520px;overflow:auto}
-.s2-row{display:grid;grid-template-columns:26px repeat(var(--cols),minmax(0,1fr));gap:2px;align-items:center}
+.s2-row{display:grid;grid-template-columns:34px repeat(var(--cols),minmax(0,1fr));gap:2px;align-items:center}
 .s2-head span{font-size:10.5px;color:var(--muted);text-align:center}
 .s2-f{font-size:10.5px;color:var(--muted);text-align:right;padding-right:4px;font-variant-numeric:tabular-nums}
-.s2-u{height:11px;border:0;border-radius:2px;padding:0;min-width:0}
+.s2-u{height:13px;border:0;border-radius:2px;padding:0;min-width:0}
 .s2-u.sel{outline:2px solid var(--fg);outline-offset:1px}
 .s2-u.pulse,.s2-zones .pulse{animation:twinPulse 1.2s ease-in-out infinite}
 .stack2d.still .pulse,.stack2d.still .dotp.red{animation:none}
+.s2-towers{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.s2-tower{display:flex;flex-direction:column;gap:2px;min-width:0}
+.s2-head b{font-size:12px;text-align:center}
+.s2-amen{font-size:9.5px;color:var(--muted);text-align:center;background:var(--line);border-radius:2px;line-height:11px}
 .s2-zones{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .s2-zones .chip{display:inline-flex;align-items:center;gap:6px}
 @media (prefers-reduced-motion: reduce){.dotp.red,.twin-legend .lg.red,.s2-u.pulse{animation:none}}

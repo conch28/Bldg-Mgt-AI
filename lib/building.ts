@@ -6,6 +6,7 @@
 import type { Role } from "@prisma/client";
 import { prisma } from "./db";
 import { nowManila } from "./format";
+import { SITE, parseUnit, towerLabel } from "./skyland";
 
 export type TwinState = "red" | "amber" | "green" | "watch" | null;
 export type TwinTicket = {
@@ -13,13 +14,13 @@ export type TwinTicket = {
   createdAt: number; deadline: number; closedAt: number | null; assignee: string | null; photo: string | null; aiNote: string | null; rating: number | null;
 };
 export type TwinUnit = {
-  code: string; floor: number; letter: string; state: TwinState;
+  code: string; floor: number; tower: string; stack: string; penthouse: boolean; state: TwinState;
   tickets: TwinTicket[]; owner: string | null; tenant: string | null; phone: string | null;
   happy: number | null; happyN: number; lastComment: string | null; sos: { kind: string; at: number } | null; watch: string | null;
 };
 export type TwinZone = { id: "lobby" | "parking" | "amenity" | "core"; label: string; state: TwinState; tickets: TwinTicket[]; locations: string[]; watch: string | null };
 export type TwinData = {
-  building: string; floors: [number, number]; letters: string[]; units: TwinUnit[]; zones: TwinZone[];
+  building: string; units: TwinUnit[]; zones: TwinZone[];
   counts: { red: number; amber: number; green: number; watch: number }; happyAvg: number | null; now: number;
 };
 
@@ -71,6 +72,7 @@ export async function buildingTwin(role: Role): Promise<TwinData> {
 
   const codes = new Set(units.map((u) => u.code.toUpperCase()));
   const twinUnits: TwinUnit[] = units.map((u) => {
+    const p = parseUnit(u.code);
     const tickets = byLoc.get(u.code.toUpperCase()) ?? [];
     const h = happy.get(u.code);
     const s = sosBy.get(u.code) ?? null;
@@ -78,15 +80,15 @@ export async function buildingTwin(role: Role): Promise<TwinData> {
     const watch = watchBy.get(u.code) ?? null;
     if (!state && watch) state = "watch";
     return {
-      code: u.code, floor: u.floor, letter: u.code.replace(/^\d+/, ""), state, tickets,
+      code: u.code, floor: u.floor, tower: p?.tower ?? "?", stack: p?.stack ?? "", penthouse: !!p?.penthouse, state, tickets,
       owner: u.owner?.name ?? u.ownerName ?? null, tenant: tenantBy.get(u.code) ?? null, phone: staff ? u.owner?.phone ?? null : null,
       happy: h ? Math.round(h.sum / h.n) : null, happyN: h?.n ?? 0, lastComment: staff ? h?.last ?? null : null, sos: s, watch,
     };
   });
 
   const ZONES: { id: TwinZone["id"]; label: string }[] = [
-    { id: "lobby", label: "Lobby and entrance" }, { id: "parking", label: "Parking (B1-B2)" },
-    { id: "amenity", label: "Amenity deck" }, { id: "core", label: "Elevators and building systems" },
+    { id: "lobby", label: "Lobbies and entrance" }, { id: "parking", label: "Parking (B1-B2)" },
+    { id: "amenity", label: `Pool deck and ${SITE.amenityFloor}th-floor amenities` }, { id: "core", label: "Elevators and building systems" },
   ];
   const zones: TwinZone[] = ZONES.map((z) => {
     const locs = [...byLoc.keys()].filter((k) => !codes.has(k) && (zoneFor(k) ?? "core") === z.id);
@@ -97,11 +99,9 @@ export async function buildingTwin(role: Role): Promise<TwinData> {
 
   const all = [...twinUnits.map((u) => u.state), ...zones.map((z) => z.state)];
   const scored = twinUnits.filter((u) => u.happy != null);
-  const floors = units.map((u) => u.floor);
-  const letters = [...new Set(units.map((u) => u.code.replace(/^\d+/, "")))].sort();
   return {
-    building: building?.name ?? "Skyland Tower",
-    floors: [Math.min(...floors, 2), Math.max(...floors, 2)], letters, units: twinUnits, zones,
+    building: building?.name ?? SITE.name,
+    units: twinUnits, zones,
     counts: { red: all.filter((s) => s === "red").length, amber: all.filter((s) => s === "amber").length, green: all.filter((s) => s === "green").length, watch: all.filter((s) => s === "watch").length },
     happyAvg: scored.length ? Math.round(scored.reduce((s, u) => s + u.happy!, 0) / scored.length) : null,
     now,
@@ -124,25 +124,27 @@ export async function earlyWarnings(): Promise<Warning[]> {
     orderBy: { createdAt: "asc" },
   });
   const out: Warning[] = [];
-  const unitRe = /^(\d{1,2})([A-Z])$/i;
+  const isUnit = (loc: string) => !!parseUnit(loc);
 
   // 1. Water problems climbing the same vertical stack usually mean a failing riser or shared pipe.
-  const wet = wos.filter((w) => unitRe.test(w.location.trim()) && WET.test(w.title) && now - w.createdAt.getTime() < 45 * 86400000);
+  const wet = wos.filter((w) => isUnit(w.location) && WET.test(w.title) && now - w.createdAt.getTime() < 45 * 86400000);
   const byStack = new Map<string, typeof wet>();
-  for (const w of wet) { const L = w.location.trim().toUpperCase().match(unitRe)![2]; byStack.set(L, [...(byStack.get(L) ?? []), w]); }
-  for (const [L, list] of byStack) {
-    const floors = [...new Set(list.map((w) => Number(w.location.match(unitRe)![1])))].sort((a, b) => a - b);
+  for (const w of wet) { const u = parseUnit(w.location)!; const k = u.stack + u.tower; byStack.set(k, [...(byStack.get(k) ?? []), w]); }
+  for (const [k, list] of byStack) {
+    const stack = k.slice(0, 2), tower = k.slice(2), name = `${towerLabel(tower)} stack ${stack}`;
+    const code = (f: number) => `${f}${stack}${tower}`;
+    const floors = [...new Set(list.map((w) => parseUnit(w.location)!.floor))].sort((a, b) => a - b);
     // find the tightest cluster of 3+ floors within 6 floors of each other
     for (let i = 0; i + 2 < floors.length; i++) {
       const span = floors.slice(i).filter((f) => f - floors[i] <= 6);
       if (span.length >= 3) {
         const lo = span[0], hi = span[span.length - 1];
-        const affected = Array.from({ length: hi - lo + 3 }, (_, k) => `${lo - 1 + k}${L}`);
+        const affected = Array.from({ length: hi - lo + 3 }, (_, j) => lo - 1 + j).filter((f) => f !== SITE.amenityFloor && f > 1 && f < SITE.penthouseFloor).map(code);
         out.push({
-          key: `stack-${L}-${lo}`, level: "high", category: "Plumbing", zone: null, location: `Stack ${L}, floors ${lo}-${hi}`,
-          title: `Likely riser leak in the ${L} stack, floors ${lo} to ${hi}`,
+          key: `stack-${k}-${lo}`, level: "high", category: "Plumbing", zone: null, location: `${name}, floors ${lo}-${hi}`,
+          title: `Likely riser leak in ${name}, floors ${lo} to ${hi}`,
           why: `${span.length} water-related tickets on floors ${span.join(", ")} in the last 45 days. Leaks moving between floors of the same stack usually come from the shared riser, not the units.`,
-          action: `Inspect the ${L}-stack riser and shaft before it floods a unit. Tell owners of ${lo - 1}${L} to ${hi + 1}${L} ahead of time.`,
+          action: `Inspect the riser and shaft of ${name} before it floods a unit. Tell owners of units ${affected[0]} to ${affected[affected.length - 1]} ahead of time.`,
           units: affected,
         });
         break;
@@ -151,7 +153,7 @@ export async function earlyWarnings(): Promise<Warning[]> {
   }
 
   // 2. The same equipment failing twice within 30 days.
-  const equip = wos.filter((w) => /elevator|lift|pump|genset|chiller|reader|gate/i.test(w.location + " " + w.category) && !unitRe.test(w.location.trim()) && now - w.createdAt.getTime() < 30 * 86400000);
+  const equip = wos.filter((w) => /elevator|lift|pump|genset|chiller|reader|gate/i.test(w.location + " " + w.category) && !isUnit(w.location) && now - w.createdAt.getTime() < 30 * 86400000);
   const byAsset = new Map<string, typeof equip>();
   for (const w of equip) byAsset.set(w.location.trim(), [...(byAsset.get(w.location.trim()) ?? []), w]);
   for (const [asset, list] of byAsset) if (list.length >= 2) {
@@ -166,7 +168,7 @@ export async function earlyWarnings(): Promise<Warning[]> {
 
   // 3. A unit with a repeat problem in the same category: fix the cause, not the symptom.
   const unitCat = new Map<string, typeof wos>();
-  for (const w of wos.filter((w) => unitRe.test(w.location.trim()))) { const k = `${w.location.trim().toUpperCase()}|${w.category}`; unitCat.set(k, [...(unitCat.get(k) ?? []), w]); }
+  for (const w of wos.filter((w) => isUnit(w.location))) { const k = `${w.location.trim().toUpperCase()}|${w.category}`; unitCat.set(k, [...(unitCat.get(k) ?? []), w]); }
   for (const [k, list] of unitCat) if (list.length >= 2 && list.some((w) => w.status !== "DONE")) {
     const [code, cat] = k.split("|");
     if (out.some((o) => o.units.includes(code))) continue;

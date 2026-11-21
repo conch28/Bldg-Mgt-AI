@@ -33,7 +33,7 @@ function validate(text: string): { rows: Row[]; problems: string[] } {
     const emailRaw = col(r, "owner_email").toLowerCase(); const phoneRaw = col(r, "owner_mobile");
     const balRaw = col(r, "balance_due").replace(/[₱,\s]/g, ""); const balance = balRaw ? Number(balRaw) : 0;
     const asOf = col(r, "balance_as_of") || prevMonth();
-    if (!/^[A-Z0-9-]{1,10}$/.test(unit)) errs.push("unit code should be like 12B (letters, numbers, dash)");
+    if (!/^[A-Z0-9-]{1,10}$/.test(unit)) errs.push("unit code should be like 1202B (letters, numbers, dash)");
     else if (seenUnits.has(unit)) errs.push(`unit ${unit} appears twice`);
     if (!Number.isInteger(floor) || floor < -5 || floor > 120) errs.push("floor should be a whole number");
     if (!(sqm > 5 && sqm < 2000)) errs.push("sqm should be the floor area, e.g. 48.5");

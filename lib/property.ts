@@ -62,7 +62,7 @@ export async function priceCheck(kind: "LEASE" | "SALE", unit: { sqm: number; fl
 }
 
 const ListingCopy = z.object({
-  title: z.string().describe("Listing headline under 70 characters, e.g. '1BR for lease at Skyland Tower, high floor, city view'"),
+  title: z.string().describe("Listing headline under 70 characters, e.g. '1BR for lease at Skyland Plaza, high floor, city view'"),
   body: z.string().describe("Facebook post in English, 70-140 words, short lines, facts only, ends with how to inquire"),
   bodyTl: z.string().describe("The same post in natural Taglish as used in Metro Manila property groups"),
   highlights: z.array(z.string()).describe("3 to 5 short selling points, each under 40 characters"),
@@ -76,9 +76,9 @@ export function templateListing(i: ListingInput): ListingCopyT {
   const price = i.kind === "LEASE" ? `${peso(i.price)}/month` : peso(i.price);
   const extra = i.notes.trim() ? `\n${i.notes.trim()}` : "";
   return {
-    title: `${what} for ${i.kind === "LEASE" ? "lease" : "sale"} at Skyland Tower, ${i.floor}th floor`,
-    body: `${what} for ${i.kind === "LEASE" ? "LEASE" : "SALE"} · Skyland Tower\n${price}\n\n• ${i.sqm} sqm, ${i.floor}th floor\n• ${FURNISH[i.furnished]}\n• Pool, gym, 24/7 security, near malls and offices${extra}\n\n${i.kind === "LEASE" ? "1 month advance, 2 months deposit. Minimum 1 year." : "Clean title. Bank financing welcome."}\nMessage us to book a viewing. Our assistant replies in minutes.`,
-    bodyTl: `${what} for ${i.kind === "LEASE" ? "rent" : "sale"} sa Skyland Tower!\n${price}\n\n• ${i.sqm} sqm, ${i.floor}th floor\n• ${FURNISH[i.furnished]}\n• May pool, gym at 24/7 security${extra}\n\nPM lang po para sa viewing, mabilis kaming sumagot.`,
+    title: `${what} for ${i.kind === "LEASE" ? "lease" : "sale"} at Skyland Plaza, ${i.floor}th floor`,
+    body: `${what} for ${i.kind === "LEASE" ? "LEASE" : "SALE"} · Skyland Plaza\n${price}\n\n• ${i.sqm} sqm, ${i.floor}th floor\n• ${FURNISH[i.furnished]}\n• Pool, gym, 24/7 security, near malls and offices${extra}\n\n${i.kind === "LEASE" ? "1 month advance, 2 months deposit. Minimum 1 year." : "Clean title. Bank financing welcome."}\nMessage us to book a viewing. Our assistant replies in minutes.`,
+    bodyTl: `${what} for ${i.kind === "LEASE" ? "rent" : "sale"} sa Skyland Plaza!\n${price}\n\n• ${i.sqm} sqm, ${i.floor}th floor\n• ${FURNISH[i.furnished]}\n• May pool, gym at 24/7 security${extra}\n\nPM lang po para sa viewing, mabilis kaming sumagot.`,
     highlights: [`${i.sqm} sqm, ${i.floor}th floor`, FURNISH[i.furnished], "Pool, gym, 24/7 security", i.kind === "LEASE" ? "Ready for move-in" : "Clean title"],
   };
 }
@@ -88,7 +88,7 @@ export async function writeListing(i: ListingInput): Promise<ListingCopyT & { ai
   try {
     const res = await anthropicClient().messages.parse({
       model: MODEL, max_tokens: 3000, output_config: { effort: "low", format: zodOutputFormat(ListingCopy) },
-      system: "You write property listings for Facebook (Page, Marketplace and Metro Manila condo groups) for units in Skyland Tower, a well-run condominium with pool, gym and 24/7 security. Be honest and specific. Use only the facts given; never invent amenities, views, parking or prices. Prices in ₱. No ALL CAPS shouting and no emojis beyond one or two bullets.",
+      system: "You write property listings for Facebook (Page, Marketplace and Metro Manila condo groups) for units in Skyland Plaza, a well-run condominium with pool, gym and 24/7 security. Be honest and specific. Use only the facts given; never invent amenities, views, parking or prices. Prices in ₱. No ALL CAPS shouting and no emojis beyond one or two bullets.",
       messages: [{ role: "user", content: `${i.kind === "LEASE" ? "For lease" : "For sale"}\nUnit: ${i.unitCode}, floor ${i.floor}, ${i.sqm} sqm, ${i.beds === 0 ? "studio" : i.beds + " bedroom(s)"}, ${FURNISH[i.furnished]}\nPrice: ${peso(i.price)}${i.kind === "LEASE" ? " per month" : ""}\nOwner's notes: ${i.notes || "(none)"}` }],
     } as any) as any;
     const out = res.parsed_output as ListingCopyT | null;
@@ -132,7 +132,7 @@ export async function answerInquiry(l: { kind: string; price: number; title: str
   try {
     const res = await anthropicClient().messages.parse({
       model: MODEL, max_tokens: 1500, output_config: { effort: "low", format: zodOutputFormat(Reply) },
-      system: `You answer Facebook inquiries for a condo listing at Skyland Tower on behalf of the owner's leasing team. Be friendly and brief. Answer only from the listing; if asked something not in it, say the broker will confirm. Offer the viewing slot ${s}. Never agree to a discount; say the broker handles offers.`,
+      system: `You answer Facebook inquiries for a condo listing at Skyland Plaza on behalf of the owner's leasing team. Be friendly and brief. Answer only from the listing; if asked something not in it, say the broker will confirm. Offer the viewing slot ${s}. Never agree to a discount; say the broker handles offers.`,
       messages: [{ role: "user", content: `Listing:\n${l.title}\n${l.body}\nPrice: ${peso(l.price)}${l.kind === "LEASE" ? "/month" : ""}\n\nMessage from ${name}:\n${msg}` }],
     } as any) as any;
     const out = res.parsed_output as z.infer<typeof Reply> | null;

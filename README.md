@@ -1,6 +1,6 @@
 # Building Mgt AI
 
-AI-first building management for Philippine condominiums. This first version runs one building, **Skyland Tower** (400 units), and ships with realistic sample data so it can be demoed on day one.
+AI-first building management for Philippine condominiums. This first version runs one building, **Skyland Plaza** (two towers, 172 units; layout in `lib/skyland.ts`), and ships with realistic sample data so it can be demoed on day one.
 
 ## What's in it
 
@@ -41,7 +41,7 @@ Seeded logins (password `Skyland2026!`, or `SEED_PASSWORD`):
 
 | Role | Email |
 |---|---|
-| Owner, unit 12B | owner@skyland.test |
+| Owner, unit 1202B | owner@skyland.test |
 | Board president / treasurer | president@skyland.test / treasurer@skyland.test |
 | Property manager | manager@skyland.test |
 | Admin | admin@skyland.test |

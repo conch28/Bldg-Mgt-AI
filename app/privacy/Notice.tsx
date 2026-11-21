@@ -4,7 +4,7 @@ import { DPO, NOTICE_VERSION } from "@/lib/privacy";
 export default function Notice() {
   return (
     <div className="legal">
-      <p className="hint">Version {NOTICE_VERSION}. Skyland Tower Condominium Corporation (the building) uses {DPO.company} to run building management. The building is the personal information controller; {DPO.company} processes your data on its behalf under a data sharing and processing agreement.</p>
+      <p className="hint">Version {NOTICE_VERSION}. Skyland Plaza Condominium Corporation (the building) uses {DPO.company} to run building management. The building is the personal information controller; {DPO.company} processes your data on its behalf under a data sharing and processing agreement.</p>
       <h2>What we collect</h2>
       <ul>
         <li>Your name, email, mobile number and the unit you own or rent.</li>

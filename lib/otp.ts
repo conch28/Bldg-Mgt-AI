@@ -46,7 +46,7 @@ export async function issueCode(identifier: string): Promise<{ demoCode?: string
   const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
   await prisma.loginCode.updateMany({ where: { userId: user.id, usedAt: null }, data: { usedAt: new Date() } }); // one live code at a time
   await prisma.loginCode.create({ data: { userId: user.id, channel, codeHash: hash(code, user.id), expiresAt: new Date(Date.now() + CODE_MINUTES * 60000) } });
-  const text = `Your Skyland Tower sign-in code is ${code}. It expires in ${CODE_MINUTES} minutes. Never share this code, even with building staff.`;
+  const text = `Your Skyland Plaza sign-in code is ${code}. It expires in ${CODE_MINUTES} minutes. Never share this code, even with building staff.`;
   const r = channel === "EMAIL" ? await sendEmail(user.email, `Your sign-in code: ${code}`, text) : await sendSms(user.phone, text);
   if (r.status === "FAILED") await captureError(new Error(`Sign-in code not delivered (${channel}): ${r.info}`), { source: "notify", userId: user.id });
   if (r.status !== "SENT" && demoMode()) return { demoCode: code };

@@ -64,7 +64,7 @@ export default async function Home({ searchParams }: { searchParams: { thanks?: 
 
   return (
     <>
-      <PageHead title={`${greet}, ${first}`} sub={units.length ? `Unit ${units.map((x) => x.code).join(" & ")} · Skyland Tower` : "Skyland Tower"} />
+      <PageHead title={`${greet}, ${first}`} sub={units.length ? `Unit ${units.map((x) => x.code).join(" & ")} · Skyland Plaza` : "Skyland Plaza"} />
       <main className="view">
         {searchParams.thanks && <div className="okmsg">{Number(searchParams.thanks) <= 2 ? "Salamat po for telling us. Your property manager will reach out to you today." : "Salamat po! Your feedback goes straight to the board."}</div>}
         <Tip id="owner-home" title="Need anything? Just tap Help.">Type it like you'd text a friend, in English or Taglish. Repairs become tickets automatically, and you'll get updates by SMS.</Tip>

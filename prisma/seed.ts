@@ -1,5 +1,5 @@
 /*
- * Seeds a realistic 400-unit tower ("Skyland Tower") with 12 months of billing,
+ * Seeds Skyland Plaza (two towers, 172 units; layout in lib/skyland.ts) with 12 months of billing,
  * payments, budgets, work orders and services, plus one login per role.
  * Safe to re-run: it wipes and recreates all data. Refuses to run when
  * NODE_ENV=production unless SEED_ALLOW_PRODUCTION=1 is set.
@@ -8,6 +8,7 @@ import { PrismaClient, Priority, WOStatus, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { seedV2 } from "./seed-v2";
 import { seedV3 } from "./seed-v3";
+import { SITE, allUnits } from "../lib/skyland";
 
 const prisma = new PrismaClient();
 
@@ -18,9 +19,8 @@ const pick = <T,>(a: T[]) => a[Math.floor(rnd() * a.length)];
 
 const SURNAMES = ["Dela Cruz","Santos","Reyes","Garcia","Mendoza","Villanueva","Tan","Lim","Bautista","Aquino","Ramos","Cruz","Navarro","Torres","Castillo","Flores","Gonzales","Lopez","Morales","Rivera","Sy","Go","Chua","Uy","Domingo","Pascual","Salazar","Valdez","Yap","Ocampo"];
 const INITIALS = "ABCDEFGHJKLMNPRSTV".split("");
-const LETTER_SQM: Record<string, number> = { A: 62, B: 45, C: 38, D: 45, E: 28, F: 52, G: 38, H: 45, J: 28, K: 85 };
-const LETTERS = Object.keys(LETTER_SQM);
 const DUES_RATE = 98;
+const ANA = "1202B"; // demo owner's unit
 
 // 12 billing months Dec 2025 .. Nov 2026, with on-time payment probability rising after reminders launched (May)
 const MONTHS = ["2025-12","2026-01","2026-02","2026-03","2026-04","2026-05","2026-06","2026-07","2026-08","2026-09","2026-10","2026-11"];
@@ -42,7 +42,7 @@ async function main() {
     throw new Error("Refusing to seed a production database. Set SEED_ALLOW_PRODUCTION=1 to override.");
   }
   // Demo deploys re-seed only when the sample data is missing or from an older version of the app.
-  const SEED_VERSION = "skyland-demo-v5";
+  const SEED_VERSION = "skyland-demo-v6";
   if (process.env.SEED_IF_EMPTY === "1" && (await prisma.building.count()) > 0) {
     const current = await prisma.auditLog.findFirst({ where: { action: "seed", detail: { contains: SEED_VERSION } } });
     if (current) { console.log("Demo data is up to date. Skipping the seed."); return; }
@@ -63,7 +63,7 @@ async function main() {
     prisma.user.deleteMany(), prisma.building.deleteMany(),
   ]);
 
-  const building = await prisma.building.create({ data: { name: "Skyland Tower", city: "Metro Manila", duesRate: DUES_RATE } });
+  const building = await prisma.building.create({ data: { name: SITE.name, city: SITE.city, duesRate: DUES_RATE } });
 
   const password = process.env.SEED_PASSWORD ?? "Skyland2026!";
   const hash = await bcrypt.hash(password, 10);
@@ -75,24 +75,19 @@ async function main() {
   const treasurer = await mk("treasurer@skyland.test", "Board Treasurer", "BOARD");
   const owner = await mk("owner@skyland.test", "Ana Reyes", "OWNER", "+63 917 555 0112");
 
-  console.log("Creating 400 units…");
-  const unitRows: { code: string; floor: number; sqm: number; ownerName: string }[] = [];
-  for (let floor = 2; floor <= 41; floor++) {
-    for (const L of LETTERS) {
-      unitRows.push({ code: `${floor}${L}`, floor, sqm: LETTER_SQM[L], ownerName: `${pick(INITIALS)}. ${pick(SURNAMES)}` });
-    }
-  }
+  const unitRows = allUnits().map((u) => ({ code: u.code, floor: u.floor, sqm: u.sqm, ownerName: `${pick(INITIALS)}. ${pick(SURNAMES)}` }));
+  console.log(`Creating ${unitRows.length} units in 2 towers…`);
   await prisma.unit.createMany({ data: unitRows.map((u) => ({ ...u, buildingId: building.id })) });
-  await prisma.unit.update({ where: { buildingId_code: { buildingId: building.id, code: "12B" } }, data: { ownerId: owner.id, ownerName: owner.name } });
+  await prisma.unit.update({ where: { buildingId_code: { buildingId: building.id, code: ANA } }, data: { ownerId: owner.id, ownerName: owner.name } });
   const units = await prisma.unit.findMany({ orderBy: [{ floor: "asc" }, { code: "asc" }] });
 
-  // chronic late payers: 2 units 90+ days, 4 units 60-90, 11 units 30-60
-  const shuffled = [...units].filter((u) => u.code !== "12B").sort(() => rnd() - 0.5);
+  // chronic late payers: 1 unit 120 days, 2 units 90, 3 units 60, 5 units 30
+  const shuffled = [...units].filter((u) => u.code !== ANA).sort(() => rnd() - 0.5);
   const lateMonths = new Map<string, number>();
-  shuffled.slice(0, 2).forEach((u) => lateMonths.set(u.id, 4));
-  shuffled.slice(2, 5).forEach((u) => lateMonths.set(u.id, 3));
-  shuffled.slice(5, 11).forEach((u) => lateMonths.set(u.id, 2));
-  shuffled.slice(11, 23).forEach((u) => lateMonths.set(u.id, 1));
+  shuffled.slice(0, 1).forEach((u) => lateMonths.set(u.id, 4));
+  shuffled.slice(1, 3).forEach((u) => lateMonths.set(u.id, 3));
+  shuffled.slice(3, 6).forEach((u) => lateMonths.set(u.id, 2));
+  shuffled.slice(6, 11).forEach((u) => lateMonths.set(u.id, 1));
   // units with an unpaid tail drag down the on-time rate for those months, so raise everyone else's odds to hit the target
   const tailCount = MONTHS.map((_, mi) => [...lateMonths.values()].filter((n) => mi >= MONTHS.length - 1 - n && mi < MONTHS.length - 1).length);
   const pOnTime = (mi: number) => Math.min(0.99, ONTIME[mi] / ((units.length - tailCount[mi]) / units.length));
@@ -107,7 +102,7 @@ async function main() {
       const isTail = mi >= MONTHS.length - 1 - unpaidTail && mi < MONTHS.length - 1; // unpaid older months
       const isNov = mi === MONTHS.length - 1;
       let paid = 0; let payDate: Date | null = null;
-      if (u.code === "12B") { if (!isNov) { paid = amount; payDate = dayIn(period, 20); } }
+      if (u.code === ANA) { if (!isNov) { paid = amount; payDate = dayIn(period, 20); } }
       else if (isTail) { paid = 0; }
       else if (isNov) { if (rnd() < ONTIME[mi] && !unpaidTail) { paid = amount; payDate = dayIn(period, 1 + Math.floor(rnd() * 20)); } }
       else if (rnd() < pOnTime(mi) || unpaidTail) { paid = amount; payDate = dayIn(period, 3 + Math.floor(rnd() * 26)); }
@@ -125,11 +120,11 @@ async function main() {
     ["Security agency", "SecureGuard Agency · 22 guards, 3 shifts", 480000],
     ["Common-area electricity", "Meralco", 265000],
     ["Building staff payroll", "Admin, engineers, technicians (at cost)", 238000],
-    ["Janitorial", "CleanPro · 14 staff", 210000],
+    ["Janitorial", "CleanPro · 14 staff, both towers", 210000],
     ["Sinking fund contribution", "Transfer to reserve account", 171000],
     ["Repairs & maintenance", "Various, 3 quotes over ₱10k", 116000],
     ["Management fee", "Building Mgt AI", 95000],
-    ["Elevator maintenance", "LiftCare · 4 cars", 68000],
+    ["Elevator maintenance", "LiftCare · 4 cars, 2 per tower", 68000],
     ["Water (common areas)", "Maynilad", 62000],
     ["Insurance", "Property & CGL, amortised", 41000],
     ["Pest control & landscaping", "GreenShield", 18000],
@@ -155,37 +150,37 @@ async function main() {
   const unitBy = (c: string) => units.find((u) => u.code === c)?.id;
   const ago = (min: number) => new Date(NOW.getTime() - min * 60000);
   const WOS: { loc: string; title: string; cat: string; pri: Priority; min: number; sla: number; status: WOStatus; who?: string; src: string; closedMin?: number; rating?: number }[] = [
-    { loc: "12B", title: "Aircon not cooling (bedroom)", cat: "Mechanical", pri: "MEDIUM", min: 240, sla: 24, status: "ASSIGNED", who: "Rudy M.", src: "Chat" },
-    { loc: "12B", title: "Kitchen faucet dripping", cat: "Plumbing", pri: "LOW", min: 4300, sla: 72, status: "DONE", who: "Rudy M.", src: "Chat", closedMin: 3100 },
-    { loc: "27F", title: "No water pressure in kitchen", cat: "Plumbing", pri: "HIGH", min: 170, sla: 4, status: "IN_PROGRESS", who: "Rudy M.", src: "Chat" },
-    { loc: "Lobby", title: "Main door access reader intermittent", cat: "Security", pri: "HIGH", min: 290, sla: 4, status: "ESCALATED", who: "Vendor: AccessPro", src: "Guard report" },
-    { loc: "9C", title: "Breaker trips when aircon runs", cat: "Electrical", pri: "MEDIUM", min: 420, sla: 24, status: "ASSIGNED", who: "Jun P.", src: "Viber" },
-    { loc: "Amenity deck", title: "Pool filter pump noisy", cat: "Mechanical", pri: "MEDIUM", min: 900, sla: 48, status: "IN_PROGRESS", who: "Jun P.", src: "Inspection" },
-    { loc: "33A", title: "Hallway light out, 33rd floor", cat: "Electrical", pri: "LOW", min: 95, sla: 72, status: "NEW", src: "Chat" },
+    { loc: ANA, title: "Aircon not cooling (bedroom)", cat: "Mechanical", pri: "MEDIUM", min: 240, sla: 24, status: "ASSIGNED", who: "Rudy M.", src: "Chat" },
+    { loc: ANA, title: "Kitchen faucet dripping", cat: "Plumbing", pri: "LOW", min: 4300, sla: 72, status: "DONE", who: "Rudy M.", src: "Chat", closedMin: 3100 },
+    { loc: "2001A", title: "No water pressure in kitchen", cat: "Plumbing", pri: "HIGH", min: 170, sla: 4, status: "IN_PROGRESS", who: "Rudy M.", src: "Chat" },
+    { loc: "Tower A lobby", title: "Main door access reader intermittent", cat: "Security", pri: "HIGH", min: 290, sla: 4, status: "ESCALATED", who: "Vendor: AccessPro", src: "Guard report" },
+    { loc: "903A", title: "Breaker trips when aircon runs", cat: "Electrical", pri: "MEDIUM", min: 420, sla: 24, status: "ASSIGNED", who: "Jun P.", src: "Viber" },
+    { loc: "Pool deck", title: "Pool filter pump noisy", cat: "Mechanical", pri: "MEDIUM", min: 900, sla: 48, status: "IN_PROGRESS", who: "Jun P.", src: "Inspection" },
+    { loc: "2203B", title: "Hallway light out, 22nd floor", cat: "Electrical", pri: "LOW", min: 95, sla: 72, status: "NEW", src: "Chat" },
     { loc: "Parking B2", title: "Ceiling drip above slot B2-114", cat: "Civil", pri: "MEDIUM", min: 60, sla: 24, status: "ASSIGNED", who: "Rudy M.", src: "Chat" },
-    { loc: "18D", title: "Intercom not ringing", cat: "Electrical", pri: "LOW", min: 35, sla: 72, status: "NEW", src: "Email" },
-    { loc: "5H", title: "Clogged balcony floor drain", cat: "Plumbing", pri: "MEDIUM", min: 1500, sla: 24, status: "DONE", who: "Rudy M.", src: "Chat", closedMin: 1160, rating: 5 },
-    { loc: "Elevator 3", title: "Door keeps re-opening", cat: "Elevator", pri: "HIGH", min: 1320, sla: 4, status: "DONE", who: "Vendor: LiftCare", src: "Inspection", closedMin: 1145, rating: 5 },
+    { loc: "1804B", title: "Intercom not ringing", cat: "Electrical", pri: "LOW", min: 35, sla: 72, status: "NEW", src: "Email" },
+    { loc: "604A", title: "Clogged balcony floor drain", cat: "Plumbing", pri: "MEDIUM", min: 1500, sla: 24, status: "DONE", who: "Rudy M.", src: "Chat", closedMin: 1160, rating: 5 },
+    { loc: "Elevator 3 (Tower B)", title: "Door keeps re-opening", cat: "Elevator", pri: "HIGH", min: 1320, sla: 4, status: "DONE", who: "Vendor: LiftCare", src: "Inspection", closedMin: 1145, rating: 5 },
     // v5: more live tickets for the 3D building view, and history that the early-warning checks pick up
-    { loc: "15B", title: "Water dripping from bathroom ceiling", cat: "Plumbing", pri: "HIGH", min: 45, sla: 4, status: "NEW", src: "Photo" },
-    { loc: "40A", title: "Water heater not working", cat: "Plumbing", pri: "MEDIUM", min: 1750, sla: 24, status: "ASSIGNED", who: "Rudy M.", src: "Chat" },
-    { loc: "22E", title: "Smoke detector keeps beeping", cat: "Electrical", pri: "MEDIUM", min: 300, sla: 24, status: "IN_PROGRESS", who: "Jun P.", src: "Chat" },
-    { loc: "36K", title: "Balcony sliding door off its track", cat: "Civil", pri: "LOW", min: 2000, sla: 72, status: "ASSIGNED", who: "Rudy M.", src: "Viber" },
-    { loc: "7G", title: "Cockroaches in kitchen cabinets", cat: "Housekeeping", pri: "LOW", min: 600, sla: 72, status: "NEW", src: "Chat" },
-    { loc: "28C", title: "Bathroom exhaust fan not working", cat: "Electrical", pri: "LOW", min: 1500, sla: 72, status: "DONE", who: "Jun P.", src: "Chat", closedMin: 300, rating: 5 },
-    { loc: "31H", title: "Kitchen sink clogged", cat: "Plumbing", pri: "MEDIUM", min: 1300, sla: 24, status: "DONE", who: "Rudy M.", src: "Photo", closedMin: 700, rating: 4 },
-    { loc: "14B", title: "Water stain on bathroom ceiling", cat: "Plumbing", pri: "MEDIUM", min: 38 * 1440, sla: 24, status: "DONE", who: "Rudy M.", src: "Chat", closedMin: 38 * 1440 - 600, rating: 4 },
-    { loc: "17B", title: "Leak behind toilet wall", cat: "Plumbing", pri: "HIGH", min: 21 * 1440, sla: 4, status: "DONE", who: "Rudy M.", src: "Chat", closedMin: 21 * 1440 - 200, rating: 4 },
-    { loc: "16B", title: "Damp wall beside the shower", cat: "Plumbing", pri: "MEDIUM", min: 9 * 1440, sla: 24, status: "DONE", who: "Rudy M.", src: "Viber", closedMin: 9 * 1440 - 900, rating: 3 },
-    { loc: "Elevator 3", title: "Stopped between floors 20 and 21", cat: "Elevator", pri: "HIGH", min: 12 * 1440, sla: 4, status: "DONE", who: "Vendor: LiftCare", src: "Guard report", closedMin: 12 * 1440 - 150, rating: 3 },
-    { loc: "9C", title: "Outlet sparking near the aircon", cat: "Electrical", pri: "HIGH", min: 25 * 1440, sla: 4, status: "DONE", who: "Jun P.", src: "Chat", closedMin: 25 * 1440 - 180, rating: 4 },
+    { loc: "1502B", title: "Water dripping from bathroom ceiling", cat: "Plumbing", pri: "HIGH", min: 45, sla: 4, status: "NEW", src: "Photo" },
+    { loc: "2401A", title: "Water heater not working (penthouse)", cat: "Plumbing", pri: "MEDIUM", min: 1750, sla: 24, status: "ASSIGNED", who: "Rudy M.", src: "Chat" },
+    { loc: "2203A", title: "Smoke detector keeps beeping", cat: "Electrical", pri: "MEDIUM", min: 300, sla: 24, status: "IN_PROGRESS", who: "Jun P.", src: "Chat" },
+    { loc: "1904B", title: "Balcony sliding door off its track", cat: "Civil", pri: "LOW", min: 2000, sla: 72, status: "ASSIGNED", who: "Rudy M.", src: "Viber" },
+    { loc: "703B", title: "Cockroaches in kitchen cabinets", cat: "Housekeeping", pri: "LOW", min: 600, sla: 72, status: "NEW", src: "Chat" },
+    { loc: "2104B", title: "Bathroom exhaust fan not working", cat: "Electrical", pri: "LOW", min: 1500, sla: 72, status: "DONE", who: "Jun P.", src: "Chat", closedMin: 300, rating: 5 },
+    { loc: "1103B", title: "Kitchen sink clogged", cat: "Plumbing", pri: "MEDIUM", min: 1300, sla: 24, status: "DONE", who: "Rudy M.", src: "Photo", closedMin: 700, rating: 4 },
+    { loc: "1402B", title: "Water stain on bathroom ceiling", cat: "Plumbing", pri: "MEDIUM", min: 38 * 1440, sla: 24, status: "DONE", who: "Rudy M.", src: "Chat", closedMin: 38 * 1440 - 600, rating: 4 },
+    { loc: "1702B", title: "Leak behind toilet wall", cat: "Plumbing", pri: "HIGH", min: 21 * 1440, sla: 4, status: "DONE", who: "Rudy M.", src: "Chat", closedMin: 21 * 1440 - 200, rating: 4 },
+    { loc: "1602B", title: "Damp wall beside the shower", cat: "Plumbing", pri: "MEDIUM", min: 9 * 1440, sla: 24, status: "DONE", who: "Rudy M.", src: "Viber", closedMin: 9 * 1440 - 900, rating: 3 },
+    { loc: "Elevator 3 (Tower B)", title: "Stopped between floors 20 and 21", cat: "Elevator", pri: "HIGH", min: 12 * 1440, sla: 4, status: "DONE", who: "Vendor: LiftCare", src: "Guard report", closedMin: 12 * 1440 - 150, rating: 3 },
+    { loc: "903A", title: "Outlet sparking near the aircon", cat: "Electrical", pri: "HIGH", min: 25 * 1440, sla: 4, status: "DONE", who: "Jun P.", src: "Chat", closedMin: 25 * 1440 - 180, rating: 4 },
   ];
   for (const w of WOS) {
     const created = ago(w.min);
     const wo = await prisma.workOrder.create({ data: {
       unitId: unitBy(w.loc) ?? null, location: w.loc, title: w.title, category: w.cat, priority: w.pri, status: w.status,
       slaHours: w.sla, assignee: w.who ?? null, source: w.src, createdAt: created, closedAt: w.closedMin ? ago(w.closedMin) : null, rating: w.rating ?? null,
-      reporterId: w.src === "Chat" && w.loc === "12B" ? owner.id : null,
+      reporterId: w.src === "Chat" && w.loc === ANA ? owner.id : null,
     } });
     await prisma.wOEvent.create({ data: { workOrderId: wo.id, note: `Ticket opened via ${w.src}. AI set priority ${w.pri.toLowerCase()} and a ${w.sla}h deadline.`, author: "AI triage", createdAt: created } });
   }
@@ -214,7 +209,7 @@ async function main() {
   await seedV2({ prisma, rnd, hash, buildingId: building.id, units, owner, manager, NOW });
   await seedV3({ prisma, rnd, units: await prisma.unit.findMany({ orderBy: [{ floor: "asc" }, { code: "asc" }] }), owner, manager, NOW });
 
-  await prisma.auditLog.create({ data: { userId: admin.id, action: "seed", detail: "Database seeded with Skyland sample data (skyland-demo-v5)" } });
+  await prisma.auditLog.create({ data: { userId: admin.id, action: "seed", detail: `Database seeded with Skyland sample data (${SEED_VERSION})` } });
   console.log(`Done. ${units.length} units, ${bills.length} bills, ${payments.length} payments.`);
   console.log(`Logins (password: ${password}): admin@ manager@ president@ treasurer@ owner@ guard@ skyland.test`);
   void manager; void president; void treasurer;

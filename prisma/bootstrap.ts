@@ -14,7 +14,7 @@ async function main() {
   if (!email) { console.log("Production bootstrap skipped: set ADMIN_EMAIL in Vercel to create the first admin login."); return; }
   let b = await prisma.building.findFirst();
   if (!b) {
-    b = await prisma.building.create({ data: { name: process.env.BUILDING_NAME || "Skyland Tower", city: process.env.BUILDING_CITY || "Metro Manila", duesRate: Number(process.env.DUES_RATE || 85) } });
+    b = await prisma.building.create({ data: { name: process.env.BUILDING_NAME || "Skyland Plaza", city: process.env.BUILDING_CITY || "Makati", duesRate: Number(process.env.DUES_RATE || 85) } });
     console.log(`Created building ${b.name}.`);
   }
   if (!(await prisma.user.findUnique({ where: { email } }))) {
