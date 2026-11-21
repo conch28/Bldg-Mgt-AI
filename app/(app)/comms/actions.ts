@@ -1,4 +1,5 @@
 "use server";
+import { rateLimit } from "@/lib/ratelimit";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -33,6 +34,7 @@ export async function sendUrgent(fd: FormData) {
 
 export async function aiDraft(fd: FormData) {
   const u = await requireRole("MANAGER", "ADMIN");
+  if (!(await rateLimit(`ai-draft:${u.id}`, 40, 3600)).ok) return back("error=" + encodeURIComponent("That's a lot of drafts this hour. Please wait a bit."));
   const p = z.object({ category: z.string().min(2).max(60), notes: z.string().min(5).max(3000) }).safeParse(Object.fromEntries(fd));
   if (!p.success) return back("error=" + encodeURIComponent("Add a type and a few notes for the AI to work from."));
   const audience = audienceFrom(fd);

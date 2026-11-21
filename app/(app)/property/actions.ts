@@ -1,4 +1,5 @@
 "use server";
+import { rateLimit } from "@/lib/ratelimit";
 import { randomInt } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -21,6 +22,7 @@ async function mine(id: string, userId: string) {
 
 export async function createListing(fd: FormData) {
   const u = await requireRole("OWNER");
+  if (!(await rateLimit(`listing:${u.id}`, 10, 3600)).ok) redirect("/property/new?error=" + encodeURIComponent("You've made several listings this hour po. Please try again later."));
   const p = z.object({ unitId: z.string(), kind: z.enum(["LEASE", "SALE"]), beds: z.coerce.number().int().min(0).max(4), furnished: z.enum(["BARE", "SEMI", "FULL"]), price: z.coerce.number().positive().max(500_000_000), notes: z.string().max(600).default(""), channels: z.array(z.enum(["FB_PAGE", "FB_MARKETPLACE", "FB_GROUPS"])).min(1) })
     .safeParse({ ...Object.fromEntries(fd), channels: fd.getAll("channels") });
   if (!p.success) redirect("/property/new?error=" + encodeURIComponent("Pick a price and at least one place to post."));

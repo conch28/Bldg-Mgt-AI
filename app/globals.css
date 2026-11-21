@@ -488,3 +488,11 @@ details.more[open]>summary::after{transform:rotate(90deg)}
 .codebox input:focus{border-color:var(--accent);outline:none}
 .codebox .btn{min-height:58px;padding:0 22px}
 html,body{margin:0}
+
+/* go-live: sign-in code, privacy, import */
+.codeinput{font-family:var(--mono,monospace);font-size:26px;letter-spacing:.4em;text-align:center;padding:12px 8px}
+.signin-more + .signin-more{margin-top:6px}
+.legal h2{font-size:18px;margin:22px 0 6px}.legal p,.legal li{line-height:1.6}.legal ul{padding-left:20px}
+.importlog{max-height:320px;overflow:auto;font-size:13px}
+.rowerr{color:var(--bad,#b42318)}
+.btn.danger{background:var(--bad,#b42318);color:#fff;border-color:transparent}

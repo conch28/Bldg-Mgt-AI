@@ -1,5 +1,6 @@
 // Build step for Vercel: finds the Supabase database settings, applies migrations,
-// loads the Skyland demo data when DEMO_MODE=1 (only into empty tables), then builds Next.js.
+// loads the Skyland demo data when DEMO_MODE=1 (only into empty tables) or, in production, creates the
+// building and first admin (prisma/bootstrap.ts), then builds Next.js.
 import { execSync } from "node:child_process";
 
 const env = { ...process.env };
@@ -20,5 +21,6 @@ if (!env.DATABASE_URL) {
 } else {
   run("npx prisma migrate deploy");
   if (env.DEMO_MODE === "1") { env.SEED_ALLOW_PRODUCTION = "1"; env.SEED_IF_EMPTY = "1"; run("npx tsx prisma/seed.ts"); }
+  else run("npx tsx prisma/bootstrap.ts"); // production: building + first admin only, never sample data
 }
 run("npx next build");

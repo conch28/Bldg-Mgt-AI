@@ -10,7 +10,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   await audit(u.id, "document viewed", d.title);
   const inline = ["application/pdf", "image/png", "image/jpeg", "text/plain"].includes(d.mime);
   return new NextResponse(new Uint8Array(d.data), { headers: {
-    "Content-Type": d.mime, "Content-Length": String(d.size), "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
+    "Content-Type": inline ? d.mime : "application/octet-stream", ...(d.mime === "application/pdf" ? {} : { "Content-Security-Policy": "sandbox; default-src 'none'; img-src 'self'" }), "Content-Length": String(d.size), "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
     "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${d.fileName.replace(/[^\w.\- ]/g, "_")}"`,
   } });
 }

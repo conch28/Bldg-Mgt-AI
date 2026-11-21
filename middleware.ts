@@ -24,4 +24,4 @@ export default withAuth({
   },
 });
 
-export const config = { matcher: ["/((?!api/auth|api/cron|api/paymongo|login|offline|_next|favicon.ico|robots.txt|manifest.webmanifest|sw.js|icons).*)"] };
+export const config = { matcher: ["/((?!api/auth|api/cron|api/paymongo|api/health|api/log-error|login|privacy|offline|_next|favicon.ico|robots.txt|manifest.webmanifest|sw.js|icons).*)"] };

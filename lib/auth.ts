@@ -4,8 +4,12 @@ import { getServerSession } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
+import { cache } from "react";
 import type { Role } from "@prisma/client";
 import { prisma } from "./db";
+import { rateLimit, clientIp } from "./ratelimit";
+import { verifyCode } from "./otp";
+import { demoMode } from "./env";
 
 export const authOptions: NextAuthOptions = {
   secret: authSecret(),
@@ -15,14 +19,34 @@ export const authOptions: NextAuthOptions = {
     Credentials({
       name: "Email and password",
       credentials: { email: { label: "Email", type: "email" }, password: { label: "Password", type: "password" } },
-      async authorize(creds) {
+      async authorize(creds, req) {
         const email = creds?.email?.toLowerCase().trim();
         if (!email || !creds?.password) return null;
+        const ip = clientIp(req?.headers as any);
+        const [a, b] = await Promise.all([rateLimit(`pw:${email}`, 8, 900), rateLimit(`pw-ip:${ip}`, demoMode() ? 200 : 30, 900)]);
+        if (!a.ok || !b.ok) throw new Error("RATE_LIMIT");
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user || !user.active) return null;
         const ok = await bcrypt.compare(creds.password, user.passwordHash);
-        if (!ok) return null;
-        await prisma.auditLog.create({ data: { userId: user.id, action: "login" } });
+        if (!ok) { await audit(user.id, "login_failed", "Wrong password"); return null; }
+        await prisma.auditLog.create({ data: { userId: user.id, action: "login", detail: "password" } });
+        return { id: user.id, email: user.email, name: user.name, role: user.role, buildingId: user.buildingId } as any;
+      },
+    }),
+    Credentials({
+      id: "otp",
+      name: "One-time code",
+      credentials: { identifier: { label: "Email or mobile", type: "text" }, code: { label: "Code", type: "text" } },
+      async authorize(creds, req) {
+        const identifier = creds?.identifier?.trim().toLowerCase();
+        const code = creds?.code?.replace(/\D/g, "");
+        if (!identifier || !code) return null;
+        const ip = clientIp(req?.headers as any);
+        const [a, b] = await Promise.all([rateLimit(`otp-v:${identifier}`, 10, 900), rateLimit(`otp-v-ip:${ip}`, 40, 900)]);
+        if (!a.ok || !b.ok) throw new Error("RATE_LIMIT");
+        const user = await verifyCode(identifier, code);
+        if (!user) return null;
+        await prisma.auditLog.create({ data: { userId: user.id, action: "login", detail: "one-time code" } });
         return { id: user.id, email: user.email, name: user.name, role: user.role, buildingId: user.buildingId } as any;
       },
     }),
@@ -39,12 +63,17 @@ export const authOptions: NextAuthOptions = {
   },
 };
 
-export type SessionUser = { id: string; name: string; email: string; role: Role; buildingId: string };
+export type SessionUser = { id: string; name: string; email: string; role: Role; buildingId: string; consented?: boolean };
 
-export async function currentUser(): Promise<SessionUser | null> {
+export const currentUser = cache(async (): Promise<SessionUser | null> => {
   const s = await getServerSession(authOptions);
-  return (s?.user as SessionUser) ?? null;
-}
+  const u = (s?.user as SessionUser) ?? null;
+  if (!u?.id) return null;
+  // A disabled or deleted account loses access at once, not when its 12-hour session runs out.
+  const db = await prisma.user.findUnique({ where: { id: u.id }, select: { active: true, role: true, name: true, consentAt: true } });
+  if (!db || !db.active) return null;
+  return { ...u, role: db.role, name: db.name, consented: Boolean(db.consentAt) };
+});
 
 /** For pages and server actions: redirects to /login, or home if the role is not allowed. */
 export async function requireRole(...roles: Role[]): Promise<SessionUser> {

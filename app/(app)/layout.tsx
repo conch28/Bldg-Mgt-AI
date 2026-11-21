@@ -3,6 +3,8 @@ import Nav, { type NavItem, type Tab } from "@/components/Nav";
 import Providers from "../providers";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { redirect } from "next/navigation";
+import { demoMode } from "@/lib/env";
 
 type Item = NavItem & { roles: string[] };
 const B = ["BOARD", "MANAGER", "ADMIN"], M = ["MANAGER", "ADMIN"], O = ["OWNER"], STAFF = ["MANAGER", "ADMIN", "GUARD"];
@@ -43,6 +45,8 @@ const ALL: Item[] = [
   { href: "/vendors", label: "Vendors & contracts", group: "Records", icon: "truck", roles: B },
   { href: "/documents", label: "Documents", group: "Records", icon: "folder", roles: B },
   { href: "/admin/users", label: "Users & units", group: "Records", icon: "users", roles: ["ADMIN"] },
+  { href: "/admin/import", label: "Import data", group: "Records", icon: "doc", roles: ["ADMIN"] },
+  { href: "/admin/system", label: "System & privacy", group: "Records", icon: "shield", roles: ["ADMIN"] },
 ];
 // Bottom tab bar on phones: four destinations per role plus "More".
 const TABS: Record<string, Tab[]> = {
@@ -55,6 +59,7 @@ const TABS: Record<string, Tab[]> = {
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const u = await requireRole();
+  if (!u.consented && !demoMode()) redirect("/consent");
   const isMgr = u.role === "MANAGER" || u.role === "ADMIN";
   const isStaff = isMgr || u.role === "GUARD";
   const [b, pending, escalated, unread, risk, sos, inquiries] = await Promise.all([

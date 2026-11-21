@@ -1,0 +1,40 @@
+# Nightly encrypted database backup (2 AM Manila).
+# Needs two repository secrets (Settings → Secrets and variables → Actions):
+#   DATABASE_BACKUP_URL  the Supabase *direct* connection string (POSTGRES_URL_NON_POOLING in Vercel)
+#   BACKUP_PASSPHRASE    a long random passphrase; store it in a password manager, you need it to restore
+# The dump is encrypted with AES-256 before upload, so it is safe even though artifacts are visible to repo collaborators.
+# Restore: download the artifact, then
+#   gpg --batch --passphrase "$BACKUP_PASSPHRASE" -d backup.sql.gz.gpg | gunzip | psql "$TARGET_DATABASE_URL"
+name: Database backup
+on:
+  schedule: [{ cron: "0 18 * * *" }]
+  workflow_dispatch: {}
+permissions: { contents: read }
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check secrets
+        id: check
+        env: { URL: "${{ secrets.DATABASE_BACKUP_URL }}", PASS: "${{ secrets.BACKUP_PASSPHRASE }}" }
+        run: |
+          if [ -z "$URL" ] || [ -z "$PASS" ]; then echo "Backup secrets not set yet; skipping."; echo "skip=1" >> "$GITHUB_OUTPUT"; fi
+      - name: Install PostgreSQL 17 client
+        if: steps.check.outputs.skip != '1'
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSo /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client-17
+      - name: Dump, compress and encrypt
+        if: steps.check.outputs.skip != '1'
+        env: { URL: "${{ secrets.DATABASE_BACKUP_URL }}", PASS: "${{ secrets.BACKUP_PASSPHRASE }}" }
+        run: |
+          set -o pipefail
+          /usr/lib/postgresql/17/bin/pg_dump --no-owner --no-privileges --schema=public "$URL" | gzip -9 \
+            | gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase "$PASS" -o backup.sql.gz.gpg
+          ls -lh backup.sql.gz.gpg
+      - uses: actions/upload-artifact@v4
+        if: steps.check.outputs.skip != '1'
+        with: { name: "db-backup-${{ github.run_id }}", path: backup.sql.gz.gpg, retention-days: 30 }

@@ -4,3 +4,11 @@ node_modules
 .env*.local
 *.tsbuildinfo
 next-env.d.ts
+
+# never commit real resident data or backups
+*.csv
+*.sql
+*.sql.gz
+*.gpg
+*.dump
+!prisma/migrations/**/migration.sql
