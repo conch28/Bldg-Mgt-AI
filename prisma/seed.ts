@@ -40,9 +40,12 @@ async function main() {
   if (process.env.NODE_ENV === "production" && process.env.SEED_ALLOW_PRODUCTION !== "1") {
     throw new Error("Refusing to seed a production database. Set SEED_ALLOW_PRODUCTION=1 to override.");
   }
+  // Demo deploys re-seed only when the sample data is missing or from an older version of the app.
+  const SEED_VERSION = "skyland-demo-v3";
   if (process.env.SEED_IF_EMPTY === "1" && (await prisma.building.count()) > 0) {
-    console.log("Database already has data. Skipping the demo seed.");
-    return;
+    const current = await prisma.auditLog.findFirst({ where: { action: "seed", detail: { contains: SEED_VERSION } } });
+    if (current) { console.log("Demo data is up to date. Skipping the seed."); return; }
+    console.log("Demo data is from an older version. Re-seeding…");
   }
   console.log("Clearing data…");
   await prisma.$transaction([
@@ -193,7 +196,7 @@ async function main() {
 
   await seedV2({ prisma, rnd, hash, buildingId: building.id, units, owner, manager, NOW });
 
-  await prisma.auditLog.create({ data: { userId: admin.id, action: "seed", detail: "Database seeded with Skyland sample data" } });
+  await prisma.auditLog.create({ data: { userId: admin.id, action: "seed", detail: "Database seeded with Skyland sample data (skyland-demo-v3)" } });
   console.log(`Done. ${units.length} units, ${bills.length} bills, ${payments.length} payments.`);
   console.log(`Logins (password: ${password}): admin@ manager@ president@ treasurer@ owner@ guard@ skyland.test`);
   void manager; void president; void treasurer;
