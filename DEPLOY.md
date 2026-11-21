@@ -12,6 +12,9 @@
 No `NEXTAUTH_SECRET` or `NEXTAUTH_URL` is needed on Vercel: the session secret is derived from the database
 password, and the URL comes from Vercel. Set `NEXTAUTH_SECRET` yourself for a real launch.
 
+## Current deployment
+Production: https://bldg-mgt-ai.vercel.app (Vercel Hobby, region sin1) with Supabase `supabase-almond-engine` (Singapore, free plan).
+
 ## Optional
 | Variable | Turns on |
 |---|---|
