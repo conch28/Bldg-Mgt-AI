@@ -21,6 +21,7 @@ Production: https://bldg-mgt-ai.vercel.app (Vercel Hobby, region sin1) with Supa
 | `SEMAPHORE_API_KEY`, `SEMAPHORE_SENDER` | Real SMS (Philippines) |
 | `RESEND_API_KEY`, `EMAIL_FROM` | Real email |
 | `MESSENGER_PAGE_TOKEN` | Facebook Messenger via your Page |
+| `FB_PAGE_ID`, `FB_PAGE_TOKEN` | Auto-post unit listings to your Facebook Page (Marketplace and groups go to the leasing team with the AI post kit; Facebook has no posting API for them) |
 | `PAYMONGO_SECRET_KEY`, `PAYMONGO_WEBHOOK_SECRET` | Real GCash / Maya / card payments |
 | `CRON_SECRET` | Daily automations (scheduled updates, maintenance work orders, dues reminder) |
 
