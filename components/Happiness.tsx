@@ -20,7 +20,7 @@ export async function HappinessHero({ compact = false }: { compact?: boolean }) 
         <div className="hint" style={{ marginTop: 6 }}>{now.responses} ratings in 30 days · {now.responseRate.toFixed(0)}% of owners responded · {now.detractors} unhappy</div>
         {!compact && <Link href="/happiness" className="btn sm pri" style={{ marginTop: 10 }}>See what residents are saying</Link>}
       </div>
-      <div className="hh-chart"><div className="hint" style={{ fontSize: 11.5, marginBottom: 2 }}>Monthly average, last 6 months</div><LineChart vals={vals} labels={trend.map((t) => monthLabel(t.period))} min={Math.max(0, Math.min(...vals) - 10)} max={100} h={150} /></div>
+      <div className="hh-chart"><div className="hint" style={{ fontSize: 11.5, marginBottom: 2 }}>Monthly average, last 6 months</div><LineChart vals={vals} labels={trend.map((t) => monthLabel(t.period))} min={Math.max(0, Math.floor((Math.min(...vals) - 5) / 10) * 10)} max={100} fmt={(v) => String(Math.round(v))} h={150} /></div>
       <div className="hh-ai">
         <div className="k">AI saved the team</div>
         <div className="hh-big" style={{ fontSize: 34 }}>{Math.round(ai.hours)}<small> hrs</small></div>

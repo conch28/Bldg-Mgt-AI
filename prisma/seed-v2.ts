@@ -98,7 +98,7 @@ export async function seedV2({ prisma, rnd, hash, buildingId, units, owner, mana
   const pulses: any[] = [];
   const reg = owners.filter((o) => o.id !== owner.id && o.units[0]);
   for (let m = 5; m >= 0; m--) {
-    const mean = 3.55 + (5 - m) * 0.13; // trend up: ~64 → ~81
+    const mean = 3.45 + (5 - m) * 0.19; // trend up: ~61 → ~84
     const count = 60 + (5 - m) * 9;
     for (let i = 0; i < count; i++) {
       const o = pick(reg);
@@ -106,7 +106,7 @@ export async function seedV2({ prisma, rnd, hash, buildingId, units, owner, mana
       let comment: string | null = null, topic: string | null = null;
       if (rnd() < 0.45) {
         topic = pick(topics);
-        const opts = C[topic].filter(([s]) => Math.abs(s - score) <= 1);
+        const opts = C[topic].filter(([s]) => s === score);
         if (opts.length) { const [s2, t] = pick(opts); comment = t; score = s2; } else topic = null;
       }
       const daysAgo = m * 30 + Math.floor(rnd() * 28) + 1;
