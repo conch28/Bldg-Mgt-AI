@@ -59,6 +59,7 @@ async function main() {
     prisma.service.deleteMany(), prisma.report.deleteMany(), prisma.budgetLine.deleteMany(),
     prisma.reminder.deleteMany(), prisma.payment.deleteMany(), prisma.bill.deleteMany(),
     prisma.wOEvent.deleteMany(), prisma.workOrder.deleteMany(), prisma.unit.deleteMany(),
+    prisma.privacyRequest.deleteMany(), prisma.loginCode.deleteMany(), prisma.errorLog.deleteMany(), prisma.rateLimit.deleteMany(),
     prisma.user.deleteMany(), prisma.building.deleteMany(),
   ]);
 
