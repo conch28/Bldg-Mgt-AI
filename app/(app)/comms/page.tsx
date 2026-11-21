@@ -23,7 +23,7 @@ function Audience({ value = "ALL" }: { value?: string }) {
           <option value="ALL">All owners</option><option value="FLOORS">Specific floors</option><option value="UNITS">Specific units</option>
           <option value="OVERDUE">Owners with overdue dues</option><option value="BOARD">Board and manager only</option>
         </select>
-        <input name="audienceValue" defaultValue={extra} placeholder="e.g. 12,14 or 12B,9C" aria-label="Floors or units" style={{ flex: 1, minWidth: 120 }} />
+        <input name="audienceValue" defaultValue={extra} placeholder="e.g. 12,14 or 1202B,903A" aria-label="Floors or units" style={{ flex: 1, minWidth: 120 }} />
       </div>
     </div>
   );

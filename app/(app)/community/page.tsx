@@ -35,7 +35,7 @@ export default async function Community({ searchParams }: { searchParams: { tab?
             <div className="field"><label htmlFor="t">What is it?</label><input id="t" name="title" required placeholder="Ikea sofa bed, grey" /></div>
             <div className="field"><label htmlFor="c">Category</label><select id="c" name="category">{CATS.map((c) => <option key={c}>{c}</option>)}</select></div>
             <div className="field"><label htmlFor="p">Price (₱, 0 for free)</label><input id="p" name="price" type="number" inputMode="numeric" min={0} /></div>
-            <div className="field"><label htmlFor="d">Details (optional)</label><input id="d" name="description" placeholder="Good condition, pick up at 12B" /></div>
+            <div className="field"><label htmlFor="d">Details (optional)</label><input id="d" name="description" placeholder="Good condition, pick up at 1202B" /></div>
             <SubmitButton label="Post to neighbours" busy="Posting…" /></form>}
         </> : <>
           <div className="card"><div className="list">{lf.length ? lf.map((x) => (

@@ -5,6 +5,7 @@ import Link from "next/link";
 import SlaTimer from "@/components/SlaTimer";
 import type { TwinData, TwinState, TwinTicket, TwinUnit, TwinZone } from "@/lib/building";
 import type { TwinScene, Paint } from "./scene";
+import { SITE, STACKS, TOWERS, towerLabel } from "@/lib/skyland";
 
 type Mode = "tickets" | "happy";
 type View = "3d" | "2d";
@@ -74,8 +75,8 @@ export default function BuildingTwin({ data, staff, compact }: { data: TwinData;
       if (!alive || !host.current) return;
       try {
         sceneRef.current = createTwinScene({
-          host: host.current, floors: data.floors, zones: data.zones.map((z) => z.id), dark: readDark(), motion: !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-          units: data.units.map((u) => ({ key: u.code, floor: u.floor, letter: u.letter })),
+          host: host.current, dark: readDark(), motion: !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+          units: data.units.map((u) => ({ key: u.code })),
           onPick: (k) => setSel(k),
         });
         setFailed(false);
@@ -84,7 +85,7 @@ export default function BuildingTwin({ data, staff, compact }: { data: TwinData;
     }).catch((e) => { console.error("3D view failed to load", e); setFailed(true); });
     return () => { alive = false; sceneRef.current?.dispose(); sceneRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, data.floors[0], data.floors[1], data.units.length]);
+  }, [view, data.units.length]);
 
   const unitColor = (u: TwinUnit) => {
     if (mode === "happy") return u.happy != null ? happyColor(u.happy) : dark ? "#2b3b52" : "#e8eef4";
@@ -153,7 +154,7 @@ export default function BuildingTwin({ data, staff, compact }: { data: TwinData;
               <div className="twin-tools">
                 {sel && <button className="btn sm" onClick={() => setSel(null)}>Reset view</button>}
               </div>
-              <div className="twin-hint hint">Drag to turn · tap a unit</div>
+              <div className="twin-hint hint">Drag sideways to turn · tap a unit</div>
             </>
           )}
           {(view === "2d" || failed) && <Stack2D data={data} mode={mode} sel={sel} onPick={setSel} color={unitColor} motion={motion} />}
@@ -222,7 +223,7 @@ function UnitPanel({ u, staff, onClose }: { u: TwinUnit; staff: boolean; onClose
   return (
     <div>
       <div className="twin-ph">
-        <div><h4>Unit {u.code}</h4><div className="hint">Floor {u.floor}{u.state ? ` · ${STATE_WORD[u.state]}` : " · No open issues"}</div></div>
+        <div><h4>Unit {u.code}</h4><div className="hint">{towerLabel(u.tower)} · {u.penthouse ? `Penthouse, floors ${u.floor}-${u.floor + 1}` : `Floor ${u.floor}`}{u.state ? ` · ${STATE_WORD[u.state]}` : " · No open issues"}</div></div>
         <button className="btn sm" onClick={onClose} aria-label="Close">Close</button>
       </div>
       <div className="twin-people">
@@ -260,26 +261,33 @@ function ZonePanel({ z, onClose }: { z: TwinZone; onClose: () => void }) {
   );
 }
 
-/** Light fallback: every floor as a row of 10 units. No WebGL, works on any phone. */
+/** Light fallback: both towers side by side, one row per floor. No WebGL, works on any phone. */
 function Stack2D({ data, mode, sel, onPick, color, motion }: { data: TwinData; mode: Mode; sel: string | null; onPick: (k: string) => void; color: (u: TwinUnit) => string; motion: boolean }) {
-  const floors = useMemo(() => {
-    const m = new Map<number, TwinUnit[]>();
-    for (const u of data.units) m.set(u.floor, [...(m.get(u.floor) ?? []), u]);
-    return [...m.entries()].sort((a, b) => b[0] - a[0]).map(([f, us]) => [f, us.sort((a, b) => data.letters.indexOf(a.letter) - data.letters.indexOf(b.letter))] as const);
-  }, [data]);
+  const by = useMemo(() => new Map(data.units.map((u) => [u.code, u])), [data.units]);
+  const floors = Array.from({ length: SITE.penthouseFloor - 1 }, (_, i) => SITE.penthouseFloor - i); // 24 … 2
+  const cell = (u: TwinUnit | undefined, span = 1) => u ? (
+    <button key={u.code} title={`Unit ${u.code}`} aria-label={`Unit ${u.code}${u.state ? ", " + STATE_WORD[u.state] : ""}`}
+      className={"s2-u" + (mode === "tickets" && u.state === "red" ? " pulse" : "") + (sel === u.code ? " sel" : "")}
+      style={{ background: color(u), gridColumn: span > 1 ? `span ${span}` : undefined }} onClick={() => onPick(u.code)} />
+  ) : <span />;
   return (
-    <div className={"stack2d" + (motion ? "" : " still")} style={{ ["--cols" as string]: data.letters.length }}>
-      <div className="s2-row s2-head"><span />{data.letters.map((l) => <span key={l}>{l}</span>)}</div>
-      {floors.map(([f, us]) => (
-        <div className="s2-row" key={f}>
-          <span className="s2-f">{f}</span>
-          {us.map((u) => (
-            <button key={u.code} title={`Unit ${u.code}`} aria-label={`Unit ${u.code}${u.state ? ", " + STATE_WORD[u.state] : ""}`}
-              className={"s2-u" + (mode === "tickets" && u.state === "red" ? " pulse" : "") + (sel === u.code ? " sel" : "")}
-              style={{ background: color(u) }} onClick={() => onPick(u.code)} />
-          ))}
-        </div>
-      ))}
+    <div className={"stack2d" + (motion ? "" : " still")} style={{ ["--cols" as string]: STACKS.length }}>
+      <div className="s2-towers">
+        {TOWERS.map((t) => (
+          <div key={t.id} className="s2-tower">
+            <div className="s2-row s2-head"><span /><b style={{ gridColumn: "span 4" }}>{t.label}</b></div>
+            <div className="s2-row s2-head"><span />{STACKS.map((s) => <span key={s}>{s}</span>)}</div>
+            {floors.map((f) => (
+              <div className="s2-row" key={f}>
+                <span className="s2-f">{f === SITE.penthouseFloor ? `PH` : f}</span>
+                {f === SITE.amenityFloor ? <span className="s2-amen" style={{ gridColumn: "span 4" }}>Amenities</span>
+                  : f === SITE.penthouseFloor ? ["01", "02"].map((s) => cell(by.get(`${f}${s}${t.id}`), 2))
+                    : STACKS.map((s) => cell(by.get(`${f}${s}${t.id}`)))}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
       <div className="s2-zones">
         {data.zones.map((z) => (
           <button key={z.id} className={"chip" + (sel === "zone:" + z.id ? " on" : "") + (mode === "tickets" && z.state === "red" ? " pulse" : "")} onClick={() => onPick("zone:" + z.id)}>

@@ -1,13 +1,15 @@
 /**
  * Three.js scene for the 3D building view. Loaded on demand (dynamic import) so the
- * rest of the app never pays for three.js. Stylized tower: 10 units per floor around
- * a central core, lobby, two basement parking levels and a 6th-floor amenity deck.
+ * rest of the app never pays for three.js. Skyland Plaza: two matching towers (4 units per
+ * floor around a core, bi-level penthouses on top), a shared podium with the pool deck at the
+ * 5th level, glass lobbies and two basement parking levels. Layout facts live in lib/skyland.ts.
  */
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { SITE, TOWERS, parseUnit } from "@/lib/skyland";
 
 export type Paint = { key: string; color: string; glow?: "red" | "amber" | "watch" | null };
-export type SceneUnit = { key: string; floor: number; letter: string };
+export type SceneUnit = { key: string };
 export type TwinScene = {
   paint: (p: Paint[]) => void;
   select: (key: string | null) => void;
@@ -17,35 +19,52 @@ export type TwinScene = {
 };
 
 const H = 0.56; // floor height
-// unit slots around the core: [x, z, width, depth]
+const TX: Record<string, number> = { A: -6.6, B: 6.6 }; // tower centres on the x axis
+const PLATE = 7.6; // tower floor plate (square)
+// unit slots around each tower core: [x, z, width, depth] relative to the tower centre
 const SLOT: Record<string, [number, number, number, number]> = {
-  A: [-3.75, 2.05, 2.4, 1.9], B: [-1.25, 2.05, 2.4, 1.9], C: [1.25, 2.05, 2.4, 1.9], D: [3.75, 2.05, 2.4, 1.9],
-  E: [5.95, 0, 1.9, 4.6],
-  F: [3.75, -2.05, 2.4, 1.9], G: [1.25, -2.05, 2.4, 1.9], H: [-1.25, -2.05, 2.4, 1.9], J: [-3.75, -2.05, 2.4, 1.9],
-  K: [-5.95, 0, 1.9, 4.6],
+  "01": [-1.95, 1.95, 3.5, 3.5], // 187 sqm corner
+  "02": [1.95, 1.95, 3.5, 3.5],
+  "03": [1.95, -1.95, 3.5, 3.5],
+  "04": [-1.95, -1.95, 3.5, 3.5],
 };
+const PH_SLOT: Record<string, [number, number, number, number]> = { "01": [-1.95, 0, 3.5, 7.4], "02": [1.95, 0, 3.5, 7.4] };
 const GLOW: Record<string, string> = { red: "#ff3b30", amber: "#ffb020", watch: "#a26bff" };
 
+function label(text: string) {
+  const c = document.createElement("canvas");
+  c.width = 256; c.height = 64;
+  const g = c.getContext("2d")!;
+  g.fillStyle = "rgba(15,30,50,.78)";
+  g.beginPath(); g.roundRect(8, 8, 240, 48, 24); g.fill();
+  g.fillStyle = "#fff"; g.font = "600 28px system-ui, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillText(text, 128, 33);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  sp.scale.set(4, 1, 1); sp.renderOrder = 20;
+  return sp;
+}
+
 export function createTwinScene(opts: {
-  host: HTMLElement; units: SceneUnit[]; floors: [number, number]; zones: string[]; dark: boolean;
-  onPick: (key: string | null) => void; motion: boolean;
+  host: HTMLElement; units: SceneUnit[]; dark: boolean; onPick: (key: string | null) => void; motion: boolean;
 }): TwinScene {
-  const { host, units, floors, onPick } = opts;
-  const [lo, hi] = floors;
+  const { host, onPick } = opts;
+  const units = opts.units.filter((u) => parseUnit(u.key) && TX[parseUnit(u.key)!.tower] != null);
+  const hi = SITE.floors;
   let visible = true, raf = 0, idleFrames = 0; // render-loop state (declared first: kick() runs during setup)
   const yOf = (f: number) => (f - 1) * H + H / 2; // floor 1 = lobby
-  const top = yOf(hi) + H / 2;
+  const top = hi * H;
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "low-power" });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setClearColor(0x000000, 0);
   host.appendChild(renderer.domElement);
-  renderer.domElement.style.touchAction = "pan-y";
   renderer.domElement.style.display = "block";
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(32, 1, 0.5, 400);
-  const home = { pos: new THREE.Vector3(34, top * 0.62, 40), target: new THREE.Vector3(0, top * 0.44, 0) };
+  const home = { pos: new THREE.Vector3(20, top * 0.8, 29), target: new THREE.Vector3(0, top * 0.42, 0) };
   camera.position.copy(home.pos);
 
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -53,12 +72,17 @@ export function createTwinScene(opts: {
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
   controls.enablePan = false;
-  controls.enableZoom = false; // wheel would fight page scroll; tapping a unit zooms instead
+  controls.enableZoom = false; // tapping a unit zooms instead
   controls.minPolarAngle = 0.95;
   controls.maxPolarAngle = 1.5;
   controls.autoRotate = opts.motion;
   controls.autoRotateSpeed = 0.55;
   controls.addEventListener("start", () => { controls.autoRotate = false; });
+  // Let the page scroll over the model: OrbitControls sets touch-action:none and grabs the wheel.
+  // Vertical swipes and the mouse wheel scroll the page; horizontal drags still turn the towers.
+  renderer.domElement.style.touchAction = "pan-y";
+  const wheelFn = (controls as unknown as { _onMouseWheel?: EventListener })._onMouseWheel;
+  if (wheelFn) renderer.domElement.removeEventListener("wheel", wheelFn);
 
   const hemi = new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.6);
   scene.add(hemi);
@@ -74,18 +98,22 @@ export function createTwinScene(opts: {
   const parkMat = new THREE.MeshStandardMaterial({ roughness: 0.9, transparent: true, opacity: 0.85 });
   const glassMat = new THREE.MeshStandardMaterial({ roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.55 });
   const poolMat = new THREE.MeshStandardMaterial({ color: "#38bdf8", roughness: 0.2 });
+  const padMat = new THREE.MeshStandardMaterial({ color: "#f5b301", roughness: 0.6 });
 
-  // ---- units (one instanced mesh, 400 boxes) ----
+  // ---- units (one instanced mesh) ----
   const box = new THREE.BoxGeometry(1, 1, 1);
-  const inst = new THREE.InstancedMesh(box, unitMat, units.length);
+  const inst = new THREE.InstancedMesh(box, unitMat, Math.max(1, units.length));
+  inst.count = units.length;
   const m = new THREE.Matrix4();
   const keyIndex = new Map<string, number>();
   const centers: THREE.Vector3[] = [];
   const sizes: THREE.Vector3[] = [];
   units.forEach((u, i) => {
-    const s = SLOT[u.letter] ?? [0, 0, 1.5, 1.5];
-    const c = new THREE.Vector3(s[0], yOf(u.floor), s[1]);
-    const z = new THREE.Vector3(s[2] - 0.12, H - 0.1, s[3] - 0.12);
+    const p = parseUnit(u.key)!;
+    const s = (p.penthouse ? PH_SLOT[p.stack] : SLOT[p.stack]) ?? [0, 0, 1.5, 1.5];
+    const span = p.penthouse ? 2 : 1;
+    const c = new THREE.Vector3(TX[p.tower] + s[0], (p.floor - 1) * H + (span * H) / 2, s[1]);
+    const z = new THREE.Vector3(s[2] - 0.14, span * H - 0.1, s[3] - 0.14);
     m.compose(c, new THREE.Quaternion(), z);
     inst.setMatrixAt(i, m);
     inst.setColorAt(i, new THREE.Color("#ccd6e0"));
@@ -94,44 +122,62 @@ export function createTwinScene(opts: {
   inst.instanceMatrix.needsUpdate = true;
   scene.add(inst);
 
-  // floor slabs
-  const slabs = new THREE.InstancedMesh(box, slabMat, hi - lo + 2);
-  for (let f = lo, i = 0; f <= hi + 1; f++, i++) {
-    m.compose(new THREE.Vector3(0, (f - 1) * H, 0), new THREE.Quaternion(), new THREE.Vector3(14.2, 0.06, 6.3));
-    slabs.setMatrixAt(i, m);
+  const lobby = new THREE.Group(), core = new THREE.Group(), amenity = new THREE.Group();
+  for (const t of TOWERS) {
+    const x = TX[t.id];
+    // floor slabs (2 to roof)
+    const slabs = new THREE.InstancedMesh(box, slabMat, hi);
+    for (let f = 2, i = 0; f <= hi + 1; f++, i++) {
+      m.compose(new THREE.Vector3(x, (f - 1) * H, 0), new THREE.Quaternion(), new THREE.Vector3(PLATE, 0.06, PLATE));
+      slabs.setMatrixAt(i, m);
+    }
+    scene.add(slabs);
+    // core: elevators, stairs, risers
+    const c = new THREE.Mesh(box, coreMat);
+    const coreH = top + 0.9;
+    c.scale.set(0.7, coreH, 0.7); c.position.set(x, coreH / 2, 0);
+    core.add(c);
+    const crown = new THREE.Mesh(box, slabMat);
+    crown.scale.set(3.6, 0.7, 3.6); crown.position.set(x, top + 0.4, 0);
+    core.add(crown);
+    // glass lobby on the ground floor
+    const lb = new THREE.Mesh(box, glassMat);
+    lb.scale.set(PLATE - 0.4, H - 0.06, PLATE - 0.4); lb.position.set(x, yOf(1), 0);
+    lobby.add(lb);
+    // 5th-level amenities inside the tower (gym, function rooms)
+    const am = new THREE.Mesh(box, glassMat);
+    am.scale.set(PLATE - 0.4, H - 0.08, PLATE - 0.4); am.position.set(x, yOf(SITE.amenityFloor), 0);
+    amenity.add(am);
+    const tag = label(t.label);
+    tag.position.set(x, top + 2.1, 0);
+    scene.add(tag);
   }
-  scene.add(slabs);
+  // helipad on Tower A's roof (which tower has it is our assumption)
+  const pad = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 0.06, 32), padMat);
+  pad.position.set(TX.A, top + 0.8, 0);
+  core.add(pad);
+  scene.add(lobby, core);
 
-  // core (elevators, stairs, risers) and roof crown
-  const coreH = top + 1.2;
-  const core = new THREE.Mesh(box, coreMat);
-  core.scale.set(9.6, coreH, 1.9); core.position.set(0, coreH / 2, 0);
-  scene.add(core);
-  const crown = new THREE.Mesh(box, slabMat);
-  crown.scale.set(5, 0.9, 2.6); crown.position.set(0, top + 0.6, 0);
-  scene.add(crown);
+  // podium between the towers (floors 1-4) with the pool deck on its roof (5th level)
+  const podH = (SITE.amenityFloor - 1) * H;
+  const podW = TX.B - TX.A - PLATE + 0.2;
+  const podium = new THREE.Mesh(box, parkMat);
+  podium.scale.set(podW, podH, PLATE); podium.position.set(0, podH / 2, 0);
+  const deck = new THREE.Mesh(box, slabMat);
+  deck.scale.set(podW, 0.14, PLATE); deck.position.set(0, podH + 0.07, 0);
+  const pool = new THREE.Mesh(box, poolMat);
+  pool.scale.set(podW * 0.62, 0.05, PLATE * 0.42); pool.position.set(0, podH + 0.17, 0.9);
+  amenity.add(podium, deck, pool);
+  scene.add(amenity);
 
-  // lobby (glass), parking (2 basements), amenity deck (east wing at floor 6), ground
-  const lobby = new THREE.Mesh(box, glassMat);
-  lobby.scale.set(13.6, H - 0.06, 5.8); lobby.position.set(0, yOf(1), 0);
-  scene.add(lobby);
+  // parking: two basement levels under the whole site
   const parking = new THREE.Group();
   for (let b = 1; b <= 2; b++) {
     const p = new THREE.Mesh(box, parkMat);
-    p.scale.set(17, H - 0.08, 9); p.position.set(0, -b * H + H / 2 - 0.08, 0);
+    p.scale.set(TX.B - TX.A + PLATE + 3, H - 0.08, PLATE + 3); p.position.set(0, -b * H + H / 2 - 0.08, 0);
     parking.add(p);
   }
   scene.add(parking);
-  const amenity = new THREE.Group(); // tap target: deck + podium; glow uses the deck only
-  const deck = new THREE.Mesh(box, slabMat);
-  deck.scale.set(4.4, 0.16, 6); deck.position.set(9.3, yOf(6) - H / 2 + 0.08, 0);
-  const pool = new THREE.Mesh(box, poolMat);
-  pool.scale.set(2.6, 0.05, 3.4); pool.position.set(9.6, yOf(6) - H / 2 + 0.19, 0.6);
-  const podium = new THREE.Mesh(box, parkMat);
-  const podH = yOf(6) - H / 2;
-  podium.scale.set(4.4, podH, 6); podium.position.set(9.3, podH / 2, 0);
-  amenity.add(deck, pool, podium);
-  scene.add(amenity);
   const ground = new THREE.Mesh(new THREE.CircleGeometry(30, 48), groundMat);
   ground.rotation.x = -Math.PI / 2; ground.position.y = -0.005;
   scene.add(ground);
@@ -149,15 +195,17 @@ export function createTwinScene(opts: {
   selFloor.visible = false;
   scene.add(selBox, selFloor);
 
+  // meshes a zone glows on (a zone can sit in both towers, so each part glows on its own)
+  const zoneParts = (id: string): THREE.Object3D[] =>
+    id === "parking" ? [parking.children[0]] : id === "core" ? core.children.filter((o) => o !== pad && (o as THREE.Mesh).scale.y > 2)
+      : id === "amenity" ? amenity.children.filter((o) => o !== podium && o !== pool) : zoneMesh[id]?.children ?? [];
+  const boxOf = (o: THREE.Object3D) => { const b = new THREE.Box3().setFromObject(o); return { c: b.getCenter(new THREE.Vector3()), s: b.getSize(new THREE.Vector3()) }; };
+
   function boundsOf(key: string): { c: THREE.Vector3; s: THREE.Vector3 } | null {
     const i = keyIndex.get(key);
     if (i != null) return { c: centers[i], s: sizes[i] };
     const id = key.replace("zone:", "");
-    if (zoneMesh[id]) {
-      const b = new THREE.Box3().setFromObject(id === "amenity" ? deck : id === "parking" ? parking.children[0] : zoneMesh[id]);
-      return { c: b.getCenter(new THREE.Vector3()), s: b.getSize(new THREE.Vector3()) };
-    }
-    return null;
+    return zoneMesh[id] ? boxOf(id === "parking" ? parking.children[0] : id === "amenity" ? deck : zoneMesh[id]) : null;
   }
 
   function paint(list: Paint[]) {
@@ -168,9 +216,9 @@ export function createTwinScene(opts: {
       const i = keyIndex.get(p.key);
       if (i != null) inst.setColorAt(i, col.set(p.color));
       if (!p.glow) continue;
-      const b = boundsOf(p.key);
-      if (!b) continue;
       const zone = p.key.startsWith("zone:");
+      const parts = zone ? zoneParts(p.key.slice(5)).map(boxOf) : [boundsOf(p.key)].filter((b): b is NonNullable<typeof b> => !!b);
+      for (const b of parts) {
       // unit alerts show through the building (x-ray) so nothing hides on the far side; big zones stay subtle
       const mat = new THREE.MeshBasicMaterial({ color: GLOW[p.glow], transparent: true, opacity: 0.5, depthWrite: false, depthTest: zone || p.glow !== "red", blending: THREE.AdditiveBlending });
       const g = new THREE.Mesh(box, mat);
@@ -180,6 +228,7 @@ export function createTwinScene(opts: {
       g.renderOrder = p.glow === "red" ? 5 : 2;
       glowGroup.add(g);
       glows.push({ mesh: g, kind: p.glow, phase: Math.random() * Math.PI * 2, zone });
+      }
     }
     if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
     kick();
@@ -198,12 +247,13 @@ export function createTwinScene(opts: {
     selBox.visible = true; selBox.position.copy(b.c); selBox.scale.copy(b.s).addScalar(0.06);
     const isUnit = keyIndex.has(key!);
     selFloor.visible = isUnit;
-    if (isUnit) { selFloor.position.set(0, b.c.y, 0); selFloor.scale.set(14.4, H, 6.5); }
-    // look at it from the side it faces, a little above
-    const dir = new THREE.Vector3(b.c.x * 0.6, 0, b.c.z === 0 ? 0.5 : Math.sign(b.c.z)).normalize();
-    if (!isUnit) dir.set(1, 0, 1).normalize();
-    const dist = isUnit ? 30 : 38;
-    const target = new THREE.Vector3(b.c.x * 0.4, b.c.y, b.c.z * 0.3);
+    const tx = b.c.x < 0 ? TX.A : TX.B;
+    if (isUnit) { selFloor.position.set(tx, b.c.y, 0); selFloor.scale.set(PLATE + 0.2, b.s.y + 0.1, PLATE + 0.2); }
+    // look at it from the side it faces (away from its tower core), a little above
+    const dir = new THREE.Vector3(b.c.x - tx + (tx < 0 ? -0.8 : 0.8), 0, b.c.z === 0 ? 1.5 : b.c.z).normalize();
+    if (!isUnit) dir.set(1, 0, 1.4).normalize();
+    const dist = isUnit ? 30 : 40;
+    const target = isUnit ? new THREE.Vector3(tx + (b.c.x - tx) * 0.5, b.c.y, b.c.z * 0.4) : new THREE.Vector3(b.c.x * 0.3, Math.max(b.c.y, top * 0.3), 0);
     flyTo(target.clone().add(dir.multiplyScalar(dist)).add(new THREE.Vector3(0, 5, 0)), target);
   }
   function reset() {
@@ -256,7 +306,7 @@ export function createTwinScene(opts: {
     camera.aspect = w / h;
     // fit the tower: farther away on narrow (phone) screens
     const fit = camera.aspect < 0.9 ? 1.5 : camera.aspect < 1.3 ? 1.25 : 1.12;
-    home.pos.set(34 * fit, top * 0.62, 40 * fit);
+    home.pos.set(20 * fit, top * 0.8, 29 * fit);
     camera.updateProjectionMatrix();
     kick();
   };

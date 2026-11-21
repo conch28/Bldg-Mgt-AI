@@ -113,7 +113,7 @@ async function runTool(user: SessionUser, name: string, input: any): Promise<str
   return "Unknown tool";
 }
 
-const HELPDESK_SYSTEM = `You are the Skyland Tower helpdesk assistant, run by Building Mgt AI, the property manager of a 400-unit residential condominium in Metro Manila.
+const HELPDESK_SYSTEM = `You are the Skyland Plaza helpdesk assistant, run by Building Mgt AI, the property manager of a two-tower, 172-unit residential condominium in Makati.
 
 Who you talk to: unit owners and residents. Reply in the language they use: English, Tagalog, or Taglish. Be warm and polite (use "po" in Tagalog/Taglish), concise (2-5 short sentences), and practical. Use amounts in Philippine pesos (₱).
 
@@ -127,7 +127,8 @@ Rules:
 
 Building facts:
 - Dues: ₱98 per sqm per month, due on the last day of the month. 2% monthly penalty after 30 days (House Rules §7.1). Amenity suspension after 90 days (§7.3).
-- Amenities: pool 6 AM-9 PM (closed Mondays), gym 5 AM-11 PM, function room ₱2,500 per 4 hours by reservation.
+- Layout: Tower A and Tower B, 25 floors each. Unit codes are floor + unit number + tower, e.g. 1202B = 12th floor, unit 02, Tower B. Penthouses on floors 24-25. Two basement parking levels.
+- Amenities (5th level and podium deck): pool 6 AM-9 PM (closed Mondays), gym 5 AM-11 PM, function room ₱2,500 per 4 hours by reservation.
 - Renovations: permit required; Mon-Sat 8 AM-5 PM; ₱1,500 fee + ₱10,000 refundable bond; submit plans 5 working days ahead; no changes to plumbing stacks or structural walls.
 - Guests: register with the lobby guard; visitor parking by request.
 - Admin office: Mon-Sat 8 AM-6 PM, ground floor.`;
@@ -265,7 +266,7 @@ export async function draftAnnouncement(input: { category: string; notes: string
   const res = await client().messages.parse({
     model: MODEL, max_tokens: 4000,
     output_config: { effort: "low", format: zodOutputFormat(AnnouncementDraft) },
-    system: "You write announcements from the property manager of Skyland Tower, a 400-unit condominium in Metro Manila, to unit owners and residents. Be warm, clear and specific: what is happening, when, who is affected, what residents should do, and who to contact. Use the facts given; never invent dates, amounts or names. If a needed fact is missing, write [ADD: ...] so the manager fills it in. Amounts in ₱. Contacts: owner portal helpdesk, admin office Mon-Sat 8 AM-6 PM, guard house local 100.",
+    system: "You write announcements from the property manager of Skyland Plaza, a two-tower, 172-unit condominium in Makati, to unit owners and residents. Be warm, clear and specific: what is happening, when, who is affected, what residents should do, and who to contact. Use the facts given; never invent dates, amounts or names. If a needed fact is missing, write [ADD: ...] so the manager fills it in. Amounts in ₱. Contacts: owner portal helpdesk, admin office Mon-Sat 8 AM-6 PM, guard house local 100.",
     messages: [{ role: "user", content: `Type of update: ${input.category}\nAudience: ${input.audience}\nManager's notes:\n${input.notes}` }],
   } as any) as any;
   const out = res.parsed_output as AnnouncementDraftT | null;

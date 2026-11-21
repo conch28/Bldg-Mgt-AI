@@ -3,7 +3,7 @@ import type { Metadata, Viewport } from "next";
 import { RegisterSW } from "@/components/Pwa";
 
 export const metadata: Metadata = {
-  title: "Skyland · Building Mgt AI", description: "AI-first building management for Skyland Tower",
+  title: "Skyland · Building Mgt AI", description: "AI-first building management for Skyland Plaza",
   applicationName: "Skyland", appleWebApp: { capable: true, title: "Skyland", statusBarStyle: "black-translucent" },
   icons: { icon: [{ url: "/icons/favicon-64.png", sizes: "64x64" }, { url: "/icons/icon-192.png", sizes: "192x192" }], apple: "/icons/apple-touch-icon.png" },
   formatDetection: { telephone: false },

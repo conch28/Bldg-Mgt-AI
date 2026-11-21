@@ -47,7 +47,7 @@ export default async function Collections() {
         </div>
         {u.role !== "BOARD" && <div className="card"><h3>Record a payment</h3><div className="hint">For bank deposits, cheques and cash at the admin office. Applied to the oldest unpaid month first.</div>
           <form action={recordPayment} className="inline-form" style={{ marginTop: 12 }}>
-            <input name="unit" required placeholder="Unit, e.g. 12B" aria-label="Unit" style={{ width: 120 }} />
+            <input name="unit" required placeholder="Unit, e.g. 1202B" aria-label="Unit" style={{ width: 120 }} />
             <input name="amount" required type="number" step="0.01" min="1" placeholder="Amount (₱)" aria-label="Amount" style={{ width: 130 }} />
             <select name="method" aria-label="Method"><option>Bank transfer</option><option>Cheque</option><option>Cash</option><option>GCash</option><option>Maya</option></select>
             <input name="reference" required placeholder="OR / reference no." aria-label="Reference" style={{ width: 160 }} />

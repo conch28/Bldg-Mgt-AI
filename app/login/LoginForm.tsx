@@ -25,7 +25,7 @@ export default function LoginForm({ demo }: { demo: boolean }) {
       <div className="box">
         <div className="brand" style={{ padding: 0, marginBottom: 20 }}>
           <div className="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M4 21V8l6-4v17M10 21V10l8 3v8M2 21h20" /></svg></div>
-          <div><b style={{ fontFamily: "var(--display)", fontSize: 17 }}>Skyland Tower</b><div className="hint">Managed by Building Mgt AI</div></div>
+          <div><b style={{ fontFamily: "var(--display)", fontSize: 17 }}>Skyland Plaza</b><div className="hint">Managed by Building Mgt AI</div></div>
         </div>
         {demo ? <>
           <h2 style={{ fontSize: 22, marginBottom: 4 }}>Try the demo</h2>

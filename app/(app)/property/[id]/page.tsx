@@ -46,7 +46,7 @@ export default async function ListingPage({ params, searchParams }: { params: { 
         )}
 
         <div className="fbpost">
-          <div className="fbh"><div className="avatar">S</div><div><b>Skyland Tower Homes</b><div className="hint">{l.publishedAt ? fmtDateTime(l.publishedAt) : "Preview"} · Public</div></div></div>
+          <div className="fbh"><div className="avatar">S</div><div><b>Skyland Plaza Homes</b><div className="hint">{l.publishedAt ? fmtDateTime(l.publishedAt) : "Preview"} · Public</div></div></div>
           <div className="fbimg">{l.title}</div>
           <div className="fbb">{l.body}</div>
           {l.bodyTl && <details className="fbb" style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}><summary className="hint">Taglish version for groups</summary><div style={{ marginTop: 6 }}>{l.bodyTl}</div></details>}

@@ -9,35 +9,35 @@ const per = (period: string) => period;
 export async function seedV3({ prisma, rnd, units, owner, NOW }: Ctx) {
   const pick = <T,>(a: T[]) => a[Math.floor(rnd() * a.length)];
   const ago = (d: number) => new Date(NOW.getTime() - d * DAY);
-  const beds = (sqm: number) => (sqm < 35 ? 0 : sqm < 60 ? 1 : 2);
+  const beds = (sqm: number) => (sqm < 35 ? 0 : sqm < 60 ? 1 : sqm < 110 ? 2 : sqm < 250 ? 3 : 4);
   const round = (v: number, r: number) => Math.round(v / r) * r;
 
   console.log("Creating market comparables…");
   const NEARBY = [["Linden Place", 0.3], ["Calla Tower", 0.5], ["Harbor Point Residences", 0.7], ["Mabini Heights", 0.9], ["Orchid Court", 1.4]] as const;
-  const SIZES = [28, 38, 45, 52, 62, 85];
+  const SIZES = [90, 130, 137, 187]; // Skyland Plaza unit sizes (see lib/skyland.ts)
   const comps: any[] = [];
   for (const kind of ["LEASE", "SALE"] as const) {
-    const base = kind === "LEASE" ? 720 : 168000, r = kind === "LEASE" ? 500 : 10000;
-    for (let i = 0; i < 16; i++) { const sqm = pick(SIZES), floor = 5 + Math.floor(rnd() * 35); comps.push({ kind, source: "SKYLAND_DEAL", building: "Skyland Tower", distanceKm: 0, sqm, beds: beds(sqm), floor, price: round(sqm * base * (0.93 + rnd() * 0.12) * (1 + (floor - 15) * 0.002), r), date: ago(20 + rnd() * 480) }); }
-    for (let i = 0; i < 6; i++) { const sqm = pick(SIZES), floor = 5 + Math.floor(rnd() * 35); comps.push({ kind, source: "SKYLAND_LISTING", building: "Skyland Tower", distanceKm: 0, sqm, beds: beds(sqm), floor, price: round(sqm * base * (1.0 + rnd() * 0.1), r), date: ago(rnd() * 40) }); }
+    const base = kind === "LEASE" ? 540 : 112000, r = kind === "LEASE" ? 500 : 10000;
+    for (let i = 0; i < 16; i++) { const sqm = pick(SIZES), floor = 6 + Math.floor(rnd() * 18); comps.push({ kind, source: "SKYLAND_DEAL", building: "Skyland Plaza", distanceKm: 0, sqm, beds: beds(sqm), floor, price: round(sqm * base * (0.93 + rnd() * 0.12) * (1 + (floor - 15) * 0.002), r), date: ago(20 + rnd() * 480) }); }
+    for (let i = 0; i < 6; i++) { const sqm = pick(SIZES), floor = 6 + Math.floor(rnd() * 18); comps.push({ kind, source: "SKYLAND_LISTING", building: "Skyland Plaza", distanceKm: 0, sqm, beds: beds(sqm), floor, price: round(sqm * base * (1.0 + rnd() * 0.1), r), date: ago(rnd() * 40) }); }
     for (const [b, km] of NEARBY) for (let i = 0; i < 5; i++) { const sqm = pick(SIZES); comps.push({ kind, source: "NEARBY", building: b, distanceKm: km, sqm, beds: beds(sqm), price: round(sqm * base * (0.88 + rnd() * 0.2), r), date: ago(rnd() * 60) }); }
   }
   await prisma.marketComp.createMany({ data: comps });
 
   console.log("Creating Ana's leased unit, leases and utilities…");
-  const leasedUnit = units.find((u) => u.floor === 21 && ["D", "B", "H"].includes(u.code.slice(-1)) && !u.ownerId) ?? units.find((u) => !u.ownerId && Number(u.sqm) === 45)!;
+  const leasedUnit = units.find((u) => u.code === "2104A" && !u.ownerId) ?? units.find((u) => !u.ownerId && Number(u.sqm) === 90)!;
   await prisma.unit.update({ where: { id: leasedUnit.id }, data: { ownerId: owner.id, ownerName: owner.name } });
   await prisma.bill.updateMany({ where: { unitId: leasedUnit.id }, data: { status: "PAID" } });
   const bills = await prisma.bill.findMany({ where: { unitId: leasedUnit.id } });
   for (const b of bills) await prisma.bill.update({ where: { id: b.id }, data: { paid: b.amount } });
   const leaseStart = new Date(ago(300).toISOString().slice(0, 8) + "01T00:00:00+08:00");
-  await prisma.lease.create({ data: { unitId: leasedUnit.id, tenantName: "Kenji Watanabe", rent: 32000, deposit: 64000, start: leaseStart, end: new Date(NOW.getTime() + 40 * DAY) } });
-  await prisma.lease.create({ data: { unitId: leasedUnit.id, tenantName: "Liza Romero", rent: 30000, deposit: 60000, start: new Date(leaseStart.getTime() - 425 * DAY), end: new Date(leaseStart.getTime() - 62 * DAY) } });
+  await prisma.lease.create({ data: { unitId: leasedUnit.id, tenantName: "Kenji Watanabe", rent: 46000, deposit: 92000, start: leaseStart, end: new Date(NOW.getTime() + 40 * DAY) } });
+  await prisma.lease.create({ data: { unitId: leasedUnit.id, tenantName: "Liza Romero", rent: 44000, deposit: 88000, start: new Date(leaseStart.getTime() - 425 * DAY), end: new Date(leaseStart.getTime() - 62 * DAY) } });
   // a few more leased units in the building for the board's view
   const others = units.filter((u) => u.ownerId && u.ownerId !== owner.id && u.id !== leasedUnit.id).slice(0, 30);
-  await prisma.lease.createMany({ data: others.map((u) => ({ unitId: u.id, tenantName: `${pick(["J.", "M.", "R.", "A.", "C."])} ${pick(["Lim", "Cruz", "Tan", "Reyes", "Garcia", "Sy"])}`, rent: round(Number(u.sqm) * 720, 500), deposit: round(Number(u.sqm) * 1440, 500), start: ago(30 + rnd() * 300), end: new Date(NOW.getTime() + (30 + rnd() * 300) * DAY) })) });
+  await prisma.lease.createMany({ data: others.map((u) => ({ unitId: u.id, tenantName: `${pick(["J.", "M.", "R.", "A.", "C."])} ${pick(["Lim", "Cruz", "Tan", "Reyes", "Garcia", "Sy"])}`, rent: round(Number(u.sqm) * 540, 500), deposit: round(Number(u.sqm) * 1080, 500), start: ago(30 + rnd() * 300), end: new Date(NOW.getTime() + (30 + rnd() * 300) * DAY) })) });
 
-  const code12B = units.find((u) => u.code === "12B")!;
+  const code12B = units.find((u) => u.code === "1202B")!;
   const periods = Array.from({ length: 6 }, (_, i) => { const d = new Date(NOW.getTime()); d.setUTCDate(15); d.setUTCMonth(d.getUTCMonth() - 6 + i); return per(d.toISOString().slice(0, 7)); });
   const util: any[] = [];
   for (const [u, kwh, m3] of [[code12B, 260, 11], [leasedUnit, 310, 14]] as const) periods.forEach((p, i) => {
@@ -48,19 +48,19 @@ export async function seedV3({ prisma, rnd, units, owner, NOW }: Ctx) {
 
   console.log("Creating listings and inquiries…");
   const live = await prisma.listing.create({ data: {
-    unitId: leasedUnit.id, userId: owner.id, kind: "LEASE", status: "LIVE", price: 33500, suggestedLow: 31500, suggestedHigh: 35000, beds: 1, furnished: "FULL",
-    title: `1BR for lease at Skyland Tower, 21st floor, fully furnished`,
-    body: `1BR for LEASE · Skyland Tower\n₱33,500/month\n\n• 45 sqm, 21st floor, city view\n• Fully furnished, new inverter aircon\n• Pool, gym, 24/7 security\n• Walk to malls and offices\n\nAvailable ${new Date(NOW.getTime() + 41 * DAY).toLocaleDateString("en-PH", { month: "long", day: "numeric" })}. 1 month advance, 2 months deposit, minimum 1 year.\nMessage us to book a viewing. Our assistant replies in minutes.`,
-    bodyTl: `1BR for rent sa Skyland Tower!\n₱33,500/month, fully furnished, 21st floor na may city view. May pool, gym at 24/7 security. Available na next month. PM lang po para sa viewing!`,
-    highlights: ["45 sqm, 21st floor", "Fully furnished", "New inverter aircon", "Pool, gym, 24/7 security"],
+    unitId: leasedUnit.id, userId: owner.id, kind: "LEASE", status: "LIVE", price: 48000, suggestedLow: 45500, suggestedHigh: 50000, beds: 2, furnished: "FULL",
+    title: `2BR for lease at Skyland Plaza Tower A, 21st floor, fully furnished`,
+    body: `2BR for LEASE · Skyland Plaza, Makati\n₱48,000/month\n\n• 90 sqm, Tower A, 21st floor, city view\n• Fully furnished, new inverter aircon\n• Pool, gym, 24/7 security\n• Gil Puyat Ave, near Makati CBD\n\nAvailable ${new Date(NOW.getTime() + 41 * DAY).toLocaleDateString("en-PH", { month: "long", day: "numeric" })}. 1 month advance, 2 months deposit, minimum 1 year.\nMessage us to book a viewing. Our assistant replies in minutes.`,
+    bodyTl: `2BR for rent sa Skyland Plaza, Makati!\n₱48,000/month, fully furnished, 90 sqm, 21st floor na may city view. May pool, gym at 24/7 security. Available na next month. PM lang po para sa viewing!`,
+    highlights: ["90 sqm, Tower A, 21st floor", "Fully furnished", "New inverter aircon", "Pool, gym, 24/7 security"],
     rationale: "Based on 31 comparable rentals in the last 18 months: 9 closed Skyland deals, 4 current Skyland listings and 18 listings within 1 km. Adjusted for floor 21 and fully furnished.",
     channels: ["FB_PAGE", "FB_MARKETPLACE", "FB_GROUPS"], posts: ["FB_PAGE", "FB_MARKETPLACE", "FB_GROUPS"].map((c) => ({ channel: c, status: "POSTED", info: c === "FB_GROUPS" ? "Posted to 4 condo groups" : "Posted", at: ago(3).toISOString() })),
     views: 412, publishedAt: ago(3), broker: "Carla Mendoza, PRC-licensed real estate broker", ai: true, createdAt: ago(3.2),
   } });
   const slot = (d: number, h: number) => new Date(new Date(NOW.getTime() + d * DAY).toISOString().slice(0, 10) + `T${String(h).padStart(2, "0")}:00:00+08:00`);
   await prisma.inquiry.createMany({ data: [
-    { listingId: live.id, name: "Joanna Lim", channel: "MARKETPLACE", message: "Hi, is this still available? I work in the area and need a place by January.", aiReply: "Hi Joanna, thanks for your interest! Yes, it's available from early January at ₱33,500 a month (1 month advance, 2 months deposit). I can book you a viewing on Saturday at 10 AM. Reply \"OK\" and I'll send a guest pass for the lobby.", status: "VIEWING", viewingAt: slot(1, 10), passCode: "VJL4QM", createdAt: ago(2.6) },
-    { listingId: live.id, name: "Mark Villanueva", channel: "MESSENGER", message: "Magkano po move-in? Pwede po ba pets?", aiReply: "Hi Mark! Ang move-in po ay ₱100,500 (1 month advance + 2 months deposit). Small pets are allowed in Skyland basta registered sa admin office, pero ico-confirm pa po ng broker namin with the owner. Gusto niyo po ba mag-viewing sa Saturday, 2 PM?", status: "ANSWERED", createdAt: ago(2.1) },
+    { listingId: live.id, name: "Joanna Lim", channel: "MARKETPLACE", message: "Hi, is this still available? I work in the area and need a place by January.", aiReply: "Hi Joanna, thanks for your interest! Yes, it's available from early January at ₱48,000 a month (1 month advance, 2 months deposit). I can book you a viewing on Saturday at 10 AM. Reply \"OK\" and I'll send a guest pass for the lobby.", status: "VIEWING", viewingAt: slot(1, 10), passCode: "VJL4QM", createdAt: ago(2.6) },
+    { listingId: live.id, name: "Mark Villanueva", channel: "MESSENGER", message: "Magkano po move-in? Pwede po ba pets?", aiReply: "Hi Mark! Ang move-in po ay ₱144,000 (1 month advance + 2 months deposit). Small pets are allowed in Skyland basta registered sa admin office, pero ico-confirm pa po ng broker namin with the owner. Gusto niyo po ba mag-viewing sa Saturday, 2 PM?", status: "ANSWERED", createdAt: ago(2.1) },
     { listingId: live.id, name: "Priya Nair", channel: "GROUP", message: "Is parking included? And is the price negotiable for a 2-year lease?", aiReply: "Hi Priya! Parking isn't included in this listing, but slots in Skyland can sometimes be rented separately; our broker can check for you. For a 2-year lease, our broker Carla will discuss terms with the owner. Would Monday at 4 PM work for a viewing?", status: "ANSWERED", createdAt: ago(1.4) },
     { listingId: live.id, name: "Daniel Ong", channel: "MESSENGER", message: "Can I see it this weekend? Me and my wife, no kids, no pets.", aiReply: "Hi Daniel, thanks! You're welcome to view it. I've got Saturday at 2 PM open. Reply \"OK\" and I'll book it and send a guest pass for the lobby.", status: "NEW", createdAt: ago(0.1) },
   ] });
@@ -69,10 +69,10 @@ export async function seedV3({ prisma, rnd, units, owner, NOW }: Ctx) {
   const ls: any[] = [];
   others2.slice(0, 22).forEach((u, i) => {
     const kind = i % 3 === 0 ? "SALE" : "LEASE", sqm = Number(u.sqm), b = beds(sqm);
-    const price = kind === "LEASE" ? round(sqm * 735, 500) : round(sqm * 170000, 50000);
+    const price = kind === "LEASE" ? round(sqm * 550, 500) : round(sqm * 114000, 50000);
     const closed = i >= 8, pub = ago(closed ? 30 + rnd() * 320 : rnd() * 25);
     ls.push({ unitId: u.id, userId: u.ownerId!, kind, status: closed ? "CLOSED" : i === 7 ? "DRAFT" : "LIVE", price, suggestedLow: round(price * 0.95, 500), suggestedHigh: round(price * 1.05, 500), beds: b, furnished: pick(["BARE", "SEMI", "FULL"]),
-      title: `${b ? b + "BR" : "Studio"} for ${kind === "LEASE" ? "lease" : "sale"} at Skyland Tower`, body: "Listing text", highlights: [], rationale: "Priced from Skyland and nearby comparables.", channels: ["FB_PAGE", "FB_MARKETPLACE", "FB_GROUPS"],
+      title: `${b ? b + "BR" : "Studio"} for ${kind === "LEASE" ? "lease" : "sale"} at Skyland Plaza`, body: "Listing text", highlights: [], rationale: "Priced from Skyland and nearby comparables.", channels: ["FB_PAGE", "FB_MARKETPLACE", "FB_GROUPS"],
       views: Math.round(80 + rnd() * 500), publishedAt: pub, closedAt: closed ? new Date(pub.getTime() + (kind === "LEASE" ? 12 + rnd() * 18 : 45 + rnd() * 60) * DAY) : null, closedPrice: closed ? price : null, ai: true, createdAt: pub });
   });
   await prisma.listing.createMany({ data: ls });

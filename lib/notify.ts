@@ -29,7 +29,7 @@ export async function sendEmail(to: string | null | undefined, subject: string, 
   if (!to) return { status: "FAILED", info: "No email" };
   if (!key || !from) return { status: "LOGGED", info: "Email not connected" };
   const html = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.55;color:#14231f;max-width:560px">${text
-    .split("\n").map((l) => l.trim() ? `<p style="margin:0 0 10px">${l.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</p>` : "").join("")}<p style="color:#5b6b67;font-size:12px;margin-top:20px">Skyland Tower · managed by Building Mgt AI. Change how you get updates in the owner portal under Account.</p></div>`;
+    .split("\n").map((l) => l.trim() ? `<p style="margin:0 0 10px">${l.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</p>` : "").join("")}<p style="color:#5b6b67;font-size:12px;margin-top:20px">Skyland Plaza · managed by Building Mgt AI. Change how you get updates in the owner portal under Account.</p></div>`;
   try {
     const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ from, to, subject, html, text }) });
     return r.ok ? { status: "SENT", info: "Email sent" } : { status: "FAILED", info: `Email error ${r.status}` };
