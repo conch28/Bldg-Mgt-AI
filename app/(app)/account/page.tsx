@@ -6,14 +6,27 @@ import SubmitButton from "@/components/SubmitButton";
 import { fmtDate } from "@/lib/format";
 import { DPO } from "@/lib/privacy";
 import { requestPrivacy } from "./actions";
+import { linkUrls } from "@/lib/channels";
 
 export const dynamic = "force-dynamic";
 export default async function Account({ searchParams }: { searchParams: { sent?: string; error?: string } }) {
   const u = await requireRole();
-  const reqs = await prisma.privacyRequest.findMany({ where: { userId: u.id }, orderBy: { createdAt: "desc" }, take: 5 });
+  const [reqs, me] = await Promise.all([
+    prisma.privacyRequest.findMany({ where: { userId: u.id }, orderBy: { createdAt: "desc" }, take: 5 }),
+    prisma.user.findUnique({ where: { id: u.id }, select: { messengerPsid: true, viberId: true } }),
+  ]);
+  const links = linkUrls(u.id);
   return (<>
     <PageHead title="Account" sub={`${u.name} · ${u.email}`} />
     <main className="view">
+      {u.role === "OWNER" && <div className="card" style={{ maxWidth: 560 }}>
+        <h3>Chat with the helpdesk on Messenger or Viber</h3>
+        <p className="hint" style={{ marginTop: 0 }}>Same assistant as the Help tab, in English, Tagalog or Taglish. Check your balance, report a repair or book a service without opening the app.</p>
+        <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+          {me?.messengerPsid ? <span className="tag t-ok">Messenger linked</span> : links.messenger ? <a className="btn" href={links.messenger} target="_blank" rel="noopener">Link Messenger</a> : <span className="tag t-mut">Messenger: coming soon</span>}
+          {me?.viberId ? <span className="tag t-ok">Viber linked</span> : links.viber ? <a className="btn" href={links.viber}>Link Viber</a> : <span className="tag t-mut">Viber: coming soon</span>}
+        </div>
+      </div>}
       <div className="card" style={{ maxWidth: 560 }}>
         <h3>Your data</h3>
         <p className="hint" style={{ marginTop: 0 }}>You can get a copy of everything we keep about you, or ask us to fix or delete it. We reply within 15 days. <a href="/privacy">Read the privacy notice</a>.</p>

@@ -367,3 +367,14 @@ export async function readRepairPhoto(dataUrl: string, caption: string): Promise
     return out ? { ...out, ai: true } : { ...readPhotoLocal(caption), ai: false };
   } catch { return { ...readPhotoLocal(caption), ai: false }; }
 }
+
+// ---------- Generic writer for board documents (agenda, minutes, advisories) ----------
+/** One-shot writing task. Uses only the facts given; returns the fallback when there is no key or the call fails. */
+export async function writeDoc(system: string, facts: string, fallback: string): Promise<{ text: string; ai: boolean }> {
+  if (!aiEnabled()) return { text: fallback, ai: false };
+  try {
+    const res = await ask({ system: system + "\nUse only the facts given; never invent names, numbers, votes or decisions. Use Philippine pesos (₱).", messages: [{ role: "user", content: facts }], effort: "low", max_tokens: 4000 });
+    const text = textOf(res);
+    return text ? { text, ai: true } : { text: fallback, ai: false };
+  } catch { return { text: fallback, ai: false }; }
+}

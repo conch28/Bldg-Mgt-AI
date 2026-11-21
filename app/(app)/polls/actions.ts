@@ -13,14 +13,27 @@ export async function vote(fd: FormData) {
   if (!poll || !opt) redirect("/polls?error=" + encodeURIComponent("Pick an option."));
   if (poll.closesAt < nowManila()) redirect("/polls?error=" + encodeURIComponent("Voting has closed."));
   const units = await prisma.unit.findMany({ where: { ownerId: u.id }, orderBy: { code: "asc" } });
-  if (!units.length) redirect("/polls?error=No+unit+linked");
+  // AGM resolutions: also vote for the units this owner holds a proxy for (unless that owner already voted personally).
+  const held = poll.meetingId ? await prisma.proxy.findMany({ where: { meetingId: poll.meetingId, holderUserId: u.id, revokedAt: null } }) : [];
+  if (!units.length && !held.length) redirect("/polls?error=No+unit+linked");
   // Resolutions: one vote per unit, weighted by floor area (per the master deed). Polls: one vote per unit, weight 1.
   const behind = await prisma.bill.count({ where: { unitId: { in: units.map((x) => x.id) }, status: { not: "PAID" }, dueDate: { lt: new Date(nowManila().getTime() - 60 * 86400000) } } });
   if (poll.kind === "RESOLUTION" && behind) redirect("/polls?error=" + encodeURIComponent("Only owners in good standing can vote on resolutions. Please settle dues over 60 days late."));
   for (const unit of units) {
-    await prisma.vote.upsert({ where: { pollId_unitId: { pollId: poll.id, unitId: unit.id } }, update: { optionId: opt.id, userId: u.id }, create: { pollId: poll.id, optionId: opt.id, unitId: unit.id, userId: u.id, weight: poll.kind === "RESOLUTION" ? unit.sqm : 1 } });
+    await prisma.vote.upsert({ where: { pollId_unitId: { pollId: poll.id, unitId: unit.id } }, update: { optionId: opt.id, userId: u.id, byProxy: false }, create: { pollId: poll.id, optionId: opt.id, unitId: unit.id, userId: u.id, weight: poll.kind === "RESOLUTION" ? unit.sqm : 1 } });
   }
-  await audit(u.id, "vote", `${poll.question} → ${opt.label}`);
+  let proxyN = 0;
+  for (const px of held) {
+    const cur = await prisma.vote.findUnique({ where: { pollId_unitId: { pollId: poll.id, unitId: px.unitId } } });
+    if (cur && !cur.byProxy) continue; // the owner voted in person; their own vote stands
+    const unit = await prisma.unit.findUnique({ where: { id: px.unitId } });
+    if (!unit) continue;
+    const late = await prisma.bill.count({ where: { unitId: unit.id, status: { not: "PAID" }, dueDate: { lt: new Date(nowManila().getTime() - 60 * 86400000) } } });
+    if (poll.kind === "RESOLUTION" && late) continue;
+    await prisma.vote.upsert({ where: { pollId_unitId: { pollId: poll.id, unitId: unit.id } }, update: { optionId: opt.id, userId: u.id, byProxy: true }, create: { pollId: poll.id, optionId: opt.id, unitId: unit.id, userId: u.id, weight: poll.kind === "RESOLUTION" ? unit.sqm : 1, byProxy: true } });
+    proxyN++;
+  }
+  await audit(u.id, "vote", `${poll.question} → ${opt.label}${proxyN ? ` (+${proxyN} by proxy)` : ""}`);
   revalidatePath("/polls");
   redirect("/polls?ok=" + encodeURIComponent("Thanks, your vote is in. You can change it until voting closes."));
 }

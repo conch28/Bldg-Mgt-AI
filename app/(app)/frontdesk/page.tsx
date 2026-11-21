@@ -5,6 +5,7 @@ import { PageHead, Kpi } from "@/components/ui";
 import SubmitButton from "@/components/SubmitButton";
 import { fmtDate, fmtTime, nowManila } from "@/lib/format";
 import { checkPass } from "./actions";
+import QrScan from "@/components/QrScan";
 
 export const dynamic = "force-dynamic";
 const KIND: Record<string, string> = { GUEST: "Guest", DELIVERY: "Delivery", CONTRACTOR: "Contractor", MOVE: "Move in/out", STAY: "Short stay" };
@@ -23,7 +24,7 @@ export default async function FrontDesk({ searchParams }: { searchParams: { code
   const valid = found && found.validFrom <= now && found.validTo >= now;
   return (
     <>
-      <PageHead title="Front desk" sub="Type the visitor's 6-letter code. The owner gets a text when they arrive." />
+      <PageHead title="Front desk" sub="Scan the visitor's QR or type the 6-letter code. The owner gets a text when they arrive." />
       <main className="view">
         <Tip id="guard-desk" title="Every visitor has a code.">Type it in the box, then tap Check in. No code? Call the unit owner before letting anyone up. SOS alerts show in red at the top.</Tip>
         {searchParams.error && <div className="err">{searchParams.error}</div>}
@@ -36,10 +37,14 @@ export default async function FrontDesk({ searchParams }: { searchParams: { code
               <input type="hidden" name="action" value="lookup" />
               <SubmitButton label="Look up" busy="Checking…" />
             </form>
+            <QrScan />
             {found && (
               <div className={"ann" + (valid ? "" : " urgent")} style={{ marginTop: 14 }}>
                 <div className="row"><span className={"tag " + (valid ? "t-ok" : "t-bad")}>{valid ? "Valid" : "Not valid now"}</span><span className="tag t-mut">{KIND[found.kind]}</span>{found.checkedIn && <span className="tag t-acc">In {fmtTime(found.checkedIn)}</span>}</div>
-                <h4 style={{ fontSize: 20 }}>{found.name}{found.plate ? ` · ${found.plate}` : ""}</h4>
+                <div className="row" style={{ gap: 12, alignItems: "center" }}>
+                  {found.photo && <img src={found.photo} alt={`Photo of ${found.name}`} className="guest-face" />}
+                  <div><h4 style={{ fontSize: 20 }}>{found.name}{found.plate ? ` · ${found.plate}` : ""}</h4>{found.photo && <div className="hint">Check the face matches before letting them up.</div>}</div>
+                </div>
                 <div>Unit <b>{found.unit.code}</b> · host {found.user.name} · {fmtDate(found.validFrom)}{found.validTo.getTime() - found.validFrom.getTime() > 86400000 ? ` to ${fmtDate(found.validTo)}` : ""}</div>
                 {found.note && <div className="hint">Note: {found.note}</div>}
                 <div className="row" style={{ marginTop: 10 }}>

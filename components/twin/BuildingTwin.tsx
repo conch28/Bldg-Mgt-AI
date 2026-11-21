@@ -8,11 +8,11 @@ import type { TwinScene, Paint } from "./scene";
 import { SITE, STACKS, TOWERS, towerLabel } from "@/lib/skyland";
 import { peso, fmtDate } from "@/lib/format";
 
-type Mode = "tickets" | "happy" | "occ" | "market" | "dues";
+type Mode = "tickets" | "happy" | "occ" | "market" | "dues" | "energy";
 type Cat = { k: string; label: string; color: string };
 /** Colour-blind-safe palettes: Okabe-Ito for categories, a blue→red ramp for how late dues are. */
 const NEUTRAL = { light: "#e3e9ef", dark: "#2b3b52" };
-const LENS: Record<"occ" | "market" | "dues", { name: string; hint: string; cats: Cat[]; of: (u: TwinUnit) => string; staffOnly?: boolean }> = {
+const LENS: Record<"occ" | "market" | "dues" | "energy", { name: string; hint: string; cats: Cat[]; of: (u: TwinUnit) => string; staffOnly?: boolean }> = {
   occ: { name: "Occupancy", hint: "Who lives in each unit: the owner, a tenant on a current lease, or nobody.", of: (u) => u.occ, cats: [
     { k: "OWNER", label: "Owner lives here", color: "#0072B2" }, { k: "LEASED", label: "Leased", color: "#E69F00" },
     { k: "VACANT", label: "Vacant", color: "#CC79A7" }, { k: "UNKNOWN", label: "Not recorded", color: "" },
@@ -24,9 +24,13 @@ const LENS: Record<"occ" | "market" | "dues", { name: string; hint: string; cats
     { k: "PAID", label: "Paid up", color: "#4575b4" }, { k: "DUE", label: "Due this month, not late", color: "#91bfdb" },
     { k: "LATE30", label: "1-30 days late", color: "#fdae61" }, { k: "LATE90", label: "31-90 days late", color: "#f46d43" }, { k: "LATE90P", label: "Over 90 days late", color: "#a50026" },
   ] },
+  energy: { name: "Energy & water", hint: "Last month's sub-meter readings, compared with similar-size units. AI flags likely leaks and waste.", of: (u) => u.energy, cats: [
+    { k: "LEAK", label: "Likely water leak", color: "#D55E00" }, { k: "VACANT_USE", label: "Use in a vacant unit", color: "#CC79A7" },
+    { k: "HIGH", label: "High use", color: "#E69F00" }, { k: "NORMAL", label: "Normal", color: "#56B4E9" }, { k: "LOW", label: "Efficient", color: "#009E73" }, { k: "NODATA", label: "No reading", color: "" },
+  ] },
 };
 const isLens = (m: Mode): m is keyof typeof LENS => m in LENS;
-const MODES: { k: Mode; label: string }[] = [{ k: "tickets", label: "Repairs" }, { k: "happy", label: "Happiness" }, { k: "occ", label: "Occupancy" }, { k: "market", label: "Listings" }, { k: "dues", label: "Dues" }];
+const MODES: { k: Mode; label: string }[] = [{ k: "tickets", label: "Repairs" }, { k: "happy", label: "Happiness" }, { k: "occ", label: "Occupancy" }, { k: "market", label: "Listings" }, { k: "dues", label: "Dues" }, { k: "energy", label: "Energy" }];
 type View = "3d" | "2d";
 
 const STATE_COLOR: Record<string, string> = { red: "#ef4444", amber: "#f59e0b", green: "#22c55e", watch: "#a78bfa" };
@@ -128,7 +132,7 @@ export default function BuildingTwin({ data, staff, compact }: { data: TwinData;
     const s = sceneRef.current;
     if (!s) return;
     const list: Paint[] = data.units.map((u) => ({ key: u.code, color: unitColor(u),
-      glow: isLens(mode) ? (only && lensCat(u)?.k === only && (lensCounts.get(only) ?? 0) <= 60 ? lensCat(u)!.color : mode === "dues" && !only && u.dues === "LATE90P" ? "red" : null)
+      glow: isLens(mode) ? (only && lensCat(u)?.k === only && (lensCounts.get(only) ?? 0) <= 60 ? lensCat(u)!.color : mode === "dues" && !only && u.dues === "LATE90P" ? "red" : mode === "energy" && !only && (u.energy === "LEAK" || u.energy === "VACANT_USE") ? "red" : null)
         : mode === "tickets" && u.state && u.state !== "green" ? u.state : mode === "happy" && u.happy != null && u.happy < 40 ? "red" : null }));
     if (mode === "tickets") for (const z of data.zones) if (z.state && z.state !== "green") list.push({ key: "zone:" + z.id, color: "", glow: z.state });
     s.paint(list);
@@ -276,11 +280,12 @@ function LensList({ lens, units, only, counts, onOnly, onPick, staff }: { lens: 
         })}
       </div>
       {lens === "dues" && staff && <Link href="/collections" className="btn sm" style={{ marginTop: 8 }}>Open collections</Link>}
+      {lens === "energy" && <Link href="/energy" className="btn sm" style={{ marginTop: 8 }}>Open energy & water</Link>}
     </>
   );
   const cat = L.cats.find((c) => c.k === only)!;
-  const rows = units.filter((u) => L.of(u) === only).sort((a, b) => lens === "dues" ? b.daysLate - a.daysLate || b.balance - a.balance : lens === "market" ? (b.price ?? 0) - (a.price ?? 0) : a.code.localeCompare(b.code, "en", { numeric: true }));
-  const sub = (u: TwinUnit) => lens === "dues" ? (u.dues === "PAID" ? "Paid up" : `${peso(u.balance)}${u.daysLate ? ` · ${u.daysLate} days late` : " due this month"}`)
+  const rows = units.filter((u) => L.of(u) === only).sort((a, b) => lens === "dues" ? b.daysLate - a.daysLate || b.balance - a.balance : lens === "market" ? (b.price ?? 0) - (a.price ?? 0) : lens === "energy" ? (b.m3 ?? 0) - (a.m3 ?? 0) : a.code.localeCompare(b.code, "en", { numeric: true }));
+  const sub = (u: TwinUnit) => lens === "energy" ? (u.kwh == null ? "No reading" : `${u.kwh} kWh · ${u.m3} m³ water`) : lens === "dues" ? (u.dues === "PAID" ? "Paid up" : `${peso(u.balance)}${u.daysLate ? ` · ${u.daysLate} days late` : " due this month"}`)
     : lens === "market" ? (u.price ? `${peso(u.price)}${u.market === "LEASE" ? "/mo" : ""} · ${u.sqm} sqm` : `${u.sqm} sqm`)
       : u.occ === "LEASED" && u.leaseEnd ? `Lease ends ${fmtDate(new Date(u.leaseEnd))}` : `${u.sqm} sqm · ${u.owner ?? "owner not registered"}`;
   return (
@@ -337,7 +342,9 @@ function UnitPanel({ u, staff, onClose }: { u: TwinUnit; staff: boolean; onClose
         {u.market !== "NONE" && <div><span className="hint">Listed</span><b>For {u.market === "SALE" ? "sale" : "lease"}{u.price ? ` · ${peso(u.price)}${u.market === "LEASE" ? "/mo" : ""}` : ""}</b></div>}
         <div><span className="hint">Dues</span><b style={{ color: u.dues.startsWith("LATE") ? "#d55e00" : undefined }}>{u.dues === "PAID" ? "Paid up" : u.dues === "DUE" ? `${peso(u.balance)} due this month` : `${peso(u.balance)} unpaid · ${u.daysLate} days late`}</b></div>
         <div><span className="hint">Size</span><b>{u.sqm} sqm</b></div>
+        {u.kwh != null && <div><span className="hint">Last month</span><b>{u.kwh} kWh · {u.m3} m³</b></div>}
       </div>
+      {u.energyNote && <div className={"twin-warn " + (u.energy === "LEAK" || u.energy === "VACANT_USE" ? "bad" : "watch")}><b>{u.energy === "LOW" ? "Energy:" : "AI flag:"}</b> {u.energyNote}</div>}
       {u.lastComment && <div className="twin-quote">&ldquo;{u.lastComment}&rdquo;</div>}
       {u.sos && <div className="twin-warn bad"><b>SOS: {u.sos.kind.toLowerCase()}</b> · {ago(Date.now() - u.sos.at)}. <Link href="/sos">Respond</Link></div>}
       {u.watch && <div className="twin-warn watch"><b>Early warning:</b> {u.watch}</div>}

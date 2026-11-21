@@ -617,3 +617,18 @@ html,body{margin:0}
 .scanning{position:relative;overflow:hidden}
 .scanning::after{content:"";position:absolute;left:0;right:0;height:40%;top:-40%;background:linear-gradient(180deg,transparent,rgba(60,196,201,.45),transparent);animation:scan 1.4s linear infinite}
 @keyframes scan{to{top:100%}}
+/* Visitor pass scan + public pass */
+.qrscan{position:relative;max-width:360px}.qrscan video{width:100%;border-radius:12px;background:#000;aspect-ratio:4/3;object-fit:cover}.qrscan .btn{position:absolute;right:8px;top:8px}
+.guestpass{min-height:100vh;padding:16px;background:var(--bg)}
+.guest-face{width:88px;height:88px;border-radius:12px;object-fit:cover;border:1px solid var(--line)}
+/* Messenger / Viber phone mock-up */
+.phone-chat{max-width:380px;border:1px solid var(--line);border-radius:26px;overflow:hidden;display:flex;flex-direction:column;height:540px;background:var(--panel);box-shadow:var(--shadow, 0 10px 30px rgba(0,0,0,.08))}
+.phone-chat .pc-top{padding:10px 14px;display:flex;flex-direction:column;gap:2px;color:#fff}.phone-chat .pc-top span{font-size:11.5px;opacity:.85}
+.phone-chat.fbm .pc-top{background:linear-gradient(135deg,#0866ff,#a033ff)}.phone-chat.viber .pc-top{background:#7360f2}
+.phone-chat .pc-top .seg2{align-self:flex-start;margin-bottom:6px;background:rgba(255,255,255,.18)}.phone-chat .pc-top .seg2 button{color:#fff}.phone-chat .pc-top .seg2 button.on{background:#fff;color:#222}
+.pc-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--panel-2)}
+.pc-b{max-width:82%;padding:8px 12px;border-radius:18px;font-size:13.5px;line-height:1.45;white-space:pre-wrap}
+.pc-b.bot{align-self:flex-start;background:var(--panel);border:1px solid var(--line)}
+.fbm .pc-b.me{align-self:flex-end;background:#0866ff;color:#fff}.viber .pc-b.me{align-self:flex-end;background:#7360f2;color:#fff}
+.pc-chips{display:flex;gap:6px;overflow-x:auto;padding:8px 10px;border-top:1px solid var(--line)}.pc-chips button{flex:none;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:5px 10px;font-size:12px;cursor:pointer;color:inherit}
+.pc-in{display:flex;gap:6px;padding:8px 10px;border-top:1px solid var(--line)}.pc-in input{flex:1;border:1px solid var(--line);border-radius:999px;padding:8px 12px;background:var(--panel-2);color:inherit}
