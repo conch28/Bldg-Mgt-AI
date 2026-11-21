@@ -286,7 +286,7 @@ a{color:inherit}
   .mtop .brand small{display:block;color:var(--side-muted);font-size:11px}
   .mtop .logo{width:32px;height:32px}
   .sos-btn{background:#d93a25;color:#fff;font-weight:800;letter-spacing:.08em;font-size:13px;border-radius:99px;min-width:56px;height:36px;display:grid;place-items:center;text-decoration:none;box-shadow:0 0 0 3px rgba(217,58,37,.3)}
-  .me{width:36px;height:36px;border-radius:50%;background:var(--side-hi);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px;text-decoration:none;flex:none}
+  .mavatar{width:36px;height:36px;border-radius:50%;background:var(--side-hi);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px;text-decoration:none;flex:none}
   .tabbar{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--panel);border-top:1px solid var(--line);
     padding:6px max(6px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(6px,env(safe-area-inset-left,0px));box-shadow:0 -8px 24px -18px rgba(0,0,0,.35)}
   .tabbar a,.tabbar button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:54px;border:0;background:none;color:var(--muted);text-decoration:none;font-size:11.5px;font-weight:600;border-radius:12px;padding:4px 2px;line-height:1.1;text-align:center}
@@ -388,3 +388,7 @@ a{color:inherit}
 .item .price{font-family:var(--display);font-weight:800;font-size:18px}
 @media (max-width:860px){.item-grid{grid-template-columns:minmax(0,1fr)}.sos-big{width:180px;height:180px}}
 .chip{text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+@media (max-width:860px){
+  .phone{border-radius:18px;height:calc(100dvh - 250px - env(safe-area-inset-bottom,0px));min-height:430px;box-shadow:none}
+  .chatlayout{gap:14px}
+}

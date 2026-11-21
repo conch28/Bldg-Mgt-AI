@@ -61,7 +61,7 @@ export default function Nav({ items, tabs, user, building }: { items: NavItem[];
       <header className="mtop">
         <Link href="/" className="brand" style={{ textDecoration: "none" }} aria-label="Home"><Logo /><div><b>{building || "Building Mgt AI"}</b><small>Building Mgt AI</small></div></Link>
         {user.role === "OWNER" && <Link href="/sos" className="sos-btn" aria-label="Emergency SOS">SOS</Link>}
-        <Link href="/account" className="me" aria-label="Account">{user.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}</Link>
+        <Link href="/account" className="mavatar" aria-label="Account">{user.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}</Link>
       </header>
 
       <nav className="tabbar" aria-label="Main">
