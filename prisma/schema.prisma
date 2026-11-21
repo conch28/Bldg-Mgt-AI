@@ -128,6 +128,8 @@ model WorkOrder {
   createdAt   DateTime  @default(now())
   closedAt    DateTime?
   rating      Int?
+  photo       String? // resident photo as a compressed JPEG data URL (photo-to-ticket)
+  aiNote      String? // what the AI saw in the photo and the advice it gave
   events      WOEvent[]
 
   @@index([status])

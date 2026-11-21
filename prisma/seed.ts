@@ -42,7 +42,7 @@ async function main() {
     throw new Error("Refusing to seed a production database. Set SEED_ALLOW_PRODUCTION=1 to override.");
   }
   // Demo deploys re-seed only when the sample data is missing or from an older version of the app.
-  const SEED_VERSION = "skyland-demo-v4";
+  const SEED_VERSION = "skyland-demo-v5";
   if (process.env.SEED_IF_EMPTY === "1" && (await prisma.building.count()) > 0) {
     const current = await prisma.auditLog.findFirst({ where: { action: "seed", detail: { contains: SEED_VERSION } } });
     if (current) { console.log("Demo data is up to date. Skipping the seed."); return; }
@@ -59,6 +59,7 @@ async function main() {
     prisma.service.deleteMany(), prisma.report.deleteMany(), prisma.budgetLine.deleteMany(),
     prisma.reminder.deleteMany(), prisma.payment.deleteMany(), prisma.bill.deleteMany(),
     prisma.wOEvent.deleteMany(), prisma.workOrder.deleteMany(), prisma.unit.deleteMany(),
+    prisma.privacyRequest.deleteMany(), prisma.loginCode.deleteMany(), prisma.errorLog.deleteMany(), prisma.rateLimit.deleteMany(),
     prisma.user.deleteMany(), prisma.building.deleteMany(),
   ]);
 
@@ -165,6 +166,19 @@ async function main() {
     { loc: "18D", title: "Intercom not ringing", cat: "Electrical", pri: "LOW", min: 35, sla: 72, status: "NEW", src: "Email" },
     { loc: "5H", title: "Clogged balcony floor drain", cat: "Plumbing", pri: "MEDIUM", min: 1500, sla: 24, status: "DONE", who: "Rudy M.", src: "Chat", closedMin: 1160, rating: 5 },
     { loc: "Elevator 3", title: "Door keeps re-opening", cat: "Elevator", pri: "HIGH", min: 1320, sla: 4, status: "DONE", who: "Vendor: LiftCare", src: "Inspection", closedMin: 1145, rating: 5 },
+    // v5: more live tickets for the 3D building view, and history that the early-warning checks pick up
+    { loc: "15B", title: "Water dripping from bathroom ceiling", cat: "Plumbing", pri: "HIGH", min: 45, sla: 4, status: "NEW", src: "Photo" },
+    { loc: "40A", title: "Water heater not working", cat: "Plumbing", pri: "MEDIUM", min: 1750, sla: 24, status: "ASSIGNED", who: "Rudy M.", src: "Chat" },
+    { loc: "22E", title: "Smoke detector keeps beeping", cat: "Electrical", pri: "MEDIUM", min: 300, sla: 24, status: "IN_PROGRESS", who: "Jun P.", src: "Chat" },
+    { loc: "36K", title: "Balcony sliding door off its track", cat: "Civil", pri: "LOW", min: 2000, sla: 72, status: "ASSIGNED", who: "Rudy M.", src: "Viber" },
+    { loc: "7G", title: "Cockroaches in kitchen cabinets", cat: "Housekeeping", pri: "LOW", min: 600, sla: 72, status: "NEW", src: "Chat" },
+    { loc: "28C", title: "Bathroom exhaust fan not working", cat: "Electrical", pri: "LOW", min: 1500, sla: 72, status: "DONE", who: "Jun P.", src: "Chat", closedMin: 300, rating: 5 },
+    { loc: "31H", title: "Kitchen sink clogged", cat: "Plumbing", pri: "MEDIUM", min: 1300, sla: 24, status: "DONE", who: "Rudy M.", src: "Photo", closedMin: 700, rating: 4 },
+    { loc: "14B", title: "Water stain on bathroom ceiling", cat: "Plumbing", pri: "MEDIUM", min: 38 * 1440, sla: 24, status: "DONE", who: "Rudy M.", src: "Chat", closedMin: 38 * 1440 - 600, rating: 4 },
+    { loc: "17B", title: "Leak behind toilet wall", cat: "Plumbing", pri: "HIGH", min: 21 * 1440, sla: 4, status: "DONE", who: "Rudy M.", src: "Chat", closedMin: 21 * 1440 - 200, rating: 4 },
+    { loc: "16B", title: "Damp wall beside the shower", cat: "Plumbing", pri: "MEDIUM", min: 9 * 1440, sla: 24, status: "DONE", who: "Rudy M.", src: "Viber", closedMin: 9 * 1440 - 900, rating: 3 },
+    { loc: "Elevator 3", title: "Stopped between floors 20 and 21", cat: "Elevator", pri: "HIGH", min: 12 * 1440, sla: 4, status: "DONE", who: "Vendor: LiftCare", src: "Guard report", closedMin: 12 * 1440 - 150, rating: 3 },
+    { loc: "9C", title: "Outlet sparking near the aircon", cat: "Electrical", pri: "HIGH", min: 25 * 1440, sla: 4, status: "DONE", who: "Jun P.", src: "Chat", closedMin: 25 * 1440 - 180, rating: 4 },
   ];
   for (const w of WOS) {
     const created = ago(w.min);
@@ -200,7 +214,7 @@ async function main() {
   await seedV2({ prisma, rnd, hash, buildingId: building.id, units, owner, manager, NOW });
   await seedV3({ prisma, rnd, units: await prisma.unit.findMany({ orderBy: [{ floor: "asc" }, { code: "asc" }] }), owner, manager, NOW });
 
-  await prisma.auditLog.create({ data: { userId: admin.id, action: "seed", detail: "Database seeded with Skyland sample data (skyland-demo-v4)" } });
+  await prisma.auditLog.create({ data: { userId: admin.id, action: "seed", detail: "Database seeded with Skyland sample data (skyland-demo-v5)" } });
   console.log(`Done. ${units.length} units, ${bills.length} bills, ${payments.length} payments.`);
   console.log(`Logins (password: ${password}): admin@ manager@ president@ treasurer@ owner@ guard@ skyland.test`);
   void manager; void president; void treasurer;

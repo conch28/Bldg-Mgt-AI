@@ -11,7 +11,7 @@ import { peso, fmtDate, fmtDateTime, monthLong, nowManila } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 const ACTIONS = [
-  { href: "/chat", icon: "chat", t: "Report a problem", cls: "primary" },
+  { href: "/report", icon: "wrench", t: "Report a problem", cls: "primary" },
   { href: "/my", icon: "card", t: "Pay dues" },
   { href: "/passes", icon: "pass", t: "Guest pass" },
   { href: "/amenities", icon: "cal", t: "Book amenity" },

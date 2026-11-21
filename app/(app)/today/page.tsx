@@ -8,6 +8,10 @@ import { HappinessHero } from "@/components/Happiness";
 import Tip from "@/components/Tip";
 import { atRiskResidents } from "@/lib/happiness";
 import { peso, fmtDate, fmtTime, nowManila } from "@/lib/format";
+import BuildingTwin from "@/components/twin/BuildingTwin";
+import MorningBriefing from "@/components/MorningBriefing";
+import { EarlyWarnings, FixLeaderboard } from "@/components/Insights";
+import { buildingTwin } from "@/lib/building";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +39,7 @@ export default async function Today() {
     slaStats(30),
     atRiskResidents(),
   ]);
+  const twin = await buildingTwin(u.role);
   const breached = open.filter((w) => now.getTime() - w.createdAt.getTime() > w.slaHours * 3600000);
   const escalated = open.filter((w) => w.status === "ESCALATED");
   const fresh = open.filter((w) => w.status === "NEW");
@@ -57,12 +62,17 @@ export default async function Today() {
         sub={`${done} of ${todos.length} clear. Start at the top.`} />
       <main className="view">
         <Tip id="mgr-today" title="Work top to bottom.">Each row is one kind of task, most urgent first. When a row says Clear, you're done with it. AI already drafted replies, updates and reminders for you to approve.</Tip>
+        <MorningBriefing />
+        <BuildingTwin data={twin} staff />
         <div className="grid g-7-5">
+          <div className="stack">
           <div className="card"><h3>Your list</h3>
             {todos.map((t) => (
               <div className="todo" key={t.t}><div className={"n " + t.cls}>{t.n}</div>
                 <div style={{ minWidth: 0 }}><b>{t.t}</b><div className="hint" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.d}</div></div>
                 {t.n > 0 ? <Link href={t.href} className="btn sm pri">{t.cta}</Link> : <span className="tag t-ok" style={{ marginLeft: "auto" }}>Clear</span>}</div>))}
+          </div>
+          <EarlyWarnings canAct />
           </div>
           <div className="stack">
             <HappinessHero compact />
@@ -80,6 +90,7 @@ export default async function Today() {
                 {!amen.length && !passes.length && <div className="hint">No bookings or expected visitors today.</div>}
               </div>
             </details>
+            <FixLeaderboard />
             <div className="card"><h3>Oldest open tickets</h3>
               <div className="list" style={{ marginTop: 6 }}>{open.slice(0, 4).map((w) => <div className="li" key={w.id}><StatusTag s={w.status} /><div>WO-{w.number} · {w.title}<div className="hint">{w.location} · since {fmtDate(w.createdAt)}</div></div></div>)}</div>
             </div>
