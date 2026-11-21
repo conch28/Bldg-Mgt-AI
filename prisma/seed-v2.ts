@@ -50,7 +50,7 @@ export async function seedV2({ prisma, rnd, hash, buildingId, units, owner, mana
     { kind: "ROUTINE", category: "Maintenance notice", title: "Pool closed Dec 2 to 4 for retiling", days: -1, ch: ["APP", "SMS", "EMAIL"], ai: true,
       en: "The swimming pool will be closed from Tuesday, Dec 2 to Thursday, Dec 4 while we replace cracked tiles and re-grout the deep end. The gym and function room stay open. Thank you for your patience!",
       tl: "Sarado po ang swimming pool mula Martes, Dec 2 hanggang Huwebes, Dec 4 dahil papalitan ang mga basag na tiles sa deep end. Bukas pa rin ang gym at function room. Salamat po sa pag-unawa!" },
-    { kind: "REMINDER", category: "Dues 2026-10", title: "October dues are due on the last day of the month", days: -27, ch: ["APP", "SMS", "EMAIL"],
+    { kind: "REMINDER", category: "Dues reminder", title: "October dues are due on the last day of the month", days: -27, ch: ["APP", "SMS", "EMAIL"],
       en: "Hi! A friendly reminder that October 2026 association dues are due on the last day of the month. Pay in seconds from the owner portal with GCash, Maya or card. If you've already paid, thank you!",
       tl: "Hi po! Paalala lang na ang October 2026 dues ay due sa huling araw ng buwan. Pwede po kayong magbayad sa owner portal gamit ang GCash, Maya o card. Kung nakabayad na kayo, salamat po!" },
   ];
@@ -80,6 +80,62 @@ export async function seedV2({ prisma, rnd, hash, buildingId, units, owner, mana
   await prisma.announcement.create({ data: { kind: "ROUTINE", category: "Event", title: "Kids' Christmas party, Dec 14", createdBy: manager.name, approvedBy: manager.name, status: "SCHEDULED", scheduledAt: at(5, 9), audience: "ALL", channels: ["APP", "EMAIL", "MESSENGER"], aiDrafted: true,
     bodyEn: "Our Kids' Christmas party is on Sunday, Dec 14, 3 PM to 6 PM at the function room. Games, a magic show and loot bags for kids 12 and under. Free for residents. Please register your kids at the admin office by Dec 10.",
     bodyTl: "Ang Kids' Christmas party ay sa Linggo, Dec 14, 3 PM hanggang 6 PM sa function room. May games, magic show at loot bags para sa mga batang 12 pababa. Libre para sa residents. Paki-register po ang mga bata sa admin office bago mag-Dec 10." } });
+
+  console.log("Creating resident pulses and helpdesk history…");
+  const C: Record<string, [number, string][]> = {
+    Repairs: [[5, "Aircon fixed the same day. Ang bilis!"], [5, "Technician was polite and cleaned up after."], [4, "Leak fixed, took two visits though."], [2, "Still waiting for my bathroom exhaust fan. Third follow-up na."], [5, "Love that I can report problems in chat at 11 PM."]],
+    Elevators: [[2, "Elevator 2 down again during rush hour. Hassle for seniors."], [3, "Long wait for elevators 7-9 AM."], [4, "Elevators better since the maintenance last month."], [1, "Stuck in Elevator 3 for 10 minutes. Scary."]],
+    Cleanliness: [[5, "Lobby and hallways are spotless lately."], [4, "Garbage room much better now."], [2, "Hallway on 23F smells, basura not collected on time."], [5, "Malinis na ang pool area, salamat!"]],
+    Security: [[5, "Visitor passes are great, guards don't call me anymore."], [4, "Guards are friendly and alert."], [3, "Delivery riders sometimes go straight up without checking."]],
+    Water: [[2, "Low water pressure in the morning on high floors."], [4, "Thanks for the advance notice on the water interruption."], [3, "Water was off longer than announced."]],
+    Communication: [[5, "Updates by SMS in Taglish are so helpful, kahit si Lola naiintindihan."], [5, "Finally I know what's happening in the building."], [4, "Newsletter is nice, short and clear."], [3, "Too many emails some weeks."]],
+    Amenities: [[5, "Booking the function room online took one minute."], [4, "Gym is good, needs one more treadmill."], [3, "Pool closed too often for maintenance."], [2, "Karaoke room noise until late on weekends."]],
+    Noise: [[2, "Renovation noise next door even on Sunday."], [3, "Neighbors' videoke until 11 PM."]],
+    Staff: [[5, "Admin office very accommodating, ang bait ni Ate sa front desk."], [4, "Manager replies quickly now."], [2, "Admin did not return my call about parking."]],
+    Dues: [[5, "Paying dues by GCash in the app is so easy."], [4, "Clear statement, I know where our money goes."], [3, "Wish there was a discount for paying early."]],
+  };
+  const topics = Object.keys(C);
+  const pulses: any[] = [];
+  const reg = owners.filter((o) => o.id !== owner.id && o.units[0]);
+  for (let m = 5; m >= 0; m--) {
+    const mean = 3.55 + (5 - m) * 0.13; // trend up: ~64 → ~81
+    const count = 60 + (5 - m) * 9;
+    for (let i = 0; i < count; i++) {
+      const o = pick(reg);
+      let score = Math.max(1, Math.min(5, Math.round(mean + (rnd() + rnd() + rnd() - 1.5) * 1.6)));
+      let comment: string | null = null, topic: string | null = null;
+      if (rnd() < 0.45) {
+        topic = pick(topics);
+        const opts = C[topic].filter(([s]) => Math.abs(s - score) <= 1);
+        if (opts.length) { const [s2, t] = pick(opts); comment = t; score = s2; } else topic = null;
+      }
+      const daysAgo = m * 30 + Math.floor(rnd() * 28) + 1;
+      const createdAt = new Date(NOW.getTime() - daysAgo * DAY + Math.floor(rnd() * 10) * 3600000);
+      const late = daysAgo < 40 && score <= 2;
+      pulses.push({ userId: o.id, unitCode: o.units[0].code, kind: rnd() < 0.3 ? "TICKET" : "MONTHLY", score, comment, topic, sentiment: score >= 4 ? "POSITIVE" : score === 3 ? "NEUTRAL" : "NEGATIVE", createdAt,
+        workOrder: null, followedUp: late && daysAgo > 6 ? new Date(createdAt.getTime() + 5 * 3600000) : score <= 2 ? createdAt : null, followNote: late && daysAgo > 6 ? "We called and scheduled a fix. Thank you for flagging it." : score <= 2 ? "Followed up by phone." : null });
+    }
+  }
+  // three fresh unhappy ratings still waiting for a call
+  const fresh: [string, number, string, string][] = [["Elevators", 1, "Stuck in Elevator 3 for 10 minutes. Scary.", "2026-11-20T19:10:00+08:00"], ["Repairs", 2, "Still waiting for my bathroom exhaust fan. Third follow-up na.", "2026-11-21T08:40:00+08:00"], ["Noise", 2, "Renovation noise next door even on Sunday.", "2026-11-19T16:05:00+08:00"]];
+  for (const [topic, score, comment, when] of fresh) { const o = pick(reg); pulses.push({ userId: o.id, unitCode: o.units[0].code, kind: "MONTHLY", score, comment, topic, sentiment: "NEGATIVE", createdAt: new Date(when) }); }
+  await prisma.pulse.createMany({ data: pulses });
+  // helpdesk chat history (AI answers questions 24/7)
+  const QA: [string, string][] = [["Anong oras bukas ang pool?", "Bukas po ang pool 6 AM hanggang 9 PM, sarado tuwing Lunes. Pwede kayong mag-book sa Book an amenity."], ["How much are my dues this month?", "Your November dues are ₱4,410, due Nov 30. You can pay with GCash, Maya or card under Dues & statements."], ["May tulo sa kisame ng banyo ko", "Pasensya na po! Nag-file na ako ng ticket at may technician na pupunta ngayong araw. Makakatanggap kayo ng update sa SMS."], ["Can I have a sofa delivered Saturday?", "Yes! Create a delivery pass under Guest & delivery passes and send the code to the courier. Deliveries are allowed 8 AM to 6 PM."]];
+  const chats: any[] = [];
+  for (let i = 0; i < 320; i++) { const o = pick(reg); const [q, a] = pick(QA); const t = new Date(NOW.getTime() - Math.floor(rnd() * 29 * DAY)); chats.push({ userId: o.id, role: "user", content: q, createdAt: t }, { userId: o.id, role: "assistant", content: a, createdAt: new Date(t.getTime() + 2000) }); }
+  await prisma.chatMessage.createMany({ data: chats });
+
+  const ago = (h: number) => new Date(NOW.getTime() - h * 3600000);
+  const someone = () => pick(reg);
+  await prisma.auditLog.createMany({ data: [
+    { userId: someone().id, action: "payment", detail: "Unit 18C paid ₱3,724 via GCash", createdAt: ago(0.4) },
+    { userId: manager.id, action: "resident follow-up", detail: "Unit 27F: technician scheduled tomorrow 9 AM, no charge", createdAt: ago(1.2) },
+    { userId: someone().id, action: "work_order", detail: "WO filed by AI helpdesk: water dripping from aircon, Unit 9A", createdAt: ago(2) },
+    { userId: someone().id, action: "booking", detail: "Unit 31B booked Function room, Sat 4 PM", createdAt: ago(3.5) },
+    { userId: manager.id, action: "announcement sent", detail: "Pool closed Dec 2 to 4 → 141 owners", createdAt: ago(20) },
+    { userId: someone().id, action: "payment", detail: "Unit 6K paid ₱8,330 via Maya", createdAt: ago(22) },
+  ] });
 
   console.log("Creating amenities, bookings and passes…");
   const AM = [

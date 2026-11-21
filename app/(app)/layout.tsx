@@ -17,6 +17,7 @@ const ALL: Item[] = [
   { href: "/documents", label: "Documents", group: "Community", icon: "folder", roles: O },
 
   { href: "/today", label: "Today", group: "Run the building", icon: "check", roles: M },
+  { href: "/happiness", label: "Resident happiness", group: "Board", icon: "heart", roles: B },
   { href: "/board", label: "Building overview", group: "Board", icon: "pulse", roles: B },
   { href: "/reports", label: "Reports & finances", group: "Board", icon: "bars", roles: B },
   { href: "/scorecard", label: "Manager scorecard", group: "Board", icon: "medal", roles: B },
@@ -36,13 +37,14 @@ const ALL: Item[] = [
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const u = await requireRole();
   const isMgr = u.role === "MANAGER" || u.role === "ADMIN";
-  const [b, pending, escalated, unread] = await Promise.all([
+  const [b, pending, escalated, unread, risk] = await Promise.all([
     prisma.building.findUnique({ where: { id: u.buildingId } }),
     isMgr ? prisma.announcement.count({ where: { status: "PENDING_APPROVAL" } }) : 0,
     isMgr ? prisma.workOrder.count({ where: { status: "ESCALATED" } }) : 0,
     u.role === "OWNER" ? prisma.delivery.count({ where: { userId: u.id, channel: "APP", readAt: null } }) : 0,
+    isMgr ? prisma.pulse.count({ where: { score: { lte: 2 }, followedUp: null, createdAt: { gte: new Date(Date.now() - 45 * 86400000) } } }) : 0,
   ]);
-  const counts: Record<string, number> = { "/comms": pending, "/work-orders": escalated, "/updates": unread, "/today": pending + escalated };
+  const counts: Record<string, number> = { "/comms": pending, "/work-orders": escalated, "/updates": unread, "/today": pending + escalated + risk, "/happiness": risk };
   const items = ALL.filter((i) => i.roles.includes(u.role)).map(({ roles, ...i }) => ({ ...i, count: counts[i.href] || 0 }));
   return (
     <Providers>

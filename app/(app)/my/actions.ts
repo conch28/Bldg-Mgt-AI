@@ -1,4 +1,5 @@
 "use server";
+import { recordPulse } from "@/lib/pulse";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -32,7 +33,12 @@ export async function payBalance(fd: FormData) {
 
 export async function rateWorkOrder(fd: FormData) {
   const u = await requireRole("OWNER");
-  const p = z.object({ id: z.string(), rating: z.coerce.number().int().min(1).max(5) }).parse(Object.fromEntries(fd));
-  await prisma.workOrder.updateMany({ where: { id: p.id, reporterId: u.id, status: "DONE" }, data: { rating: p.rating } });
+  const p = z.object({ id: z.string(), rating: z.coerce.number().int().min(1).max(5), comment: z.string().max(1000).optional() }).parse(Object.fromEntries(fd));
+  const wo = await prisma.workOrder.findFirst({ where: { id: p.id, reporterId: u.id, status: "DONE", rating: null } });
+  if (wo) {
+    await prisma.workOrder.update({ where: { id: wo.id }, data: { rating: p.rating } });
+    await recordPulse({ userId: u.id, unitCode: wo.location, kind: "TICKET", score: p.rating, comment: p.comment, workOrder: wo.number });
+    await audit(u.id, "rating", `WO-${wo.number} rated ${p.rating}★`);
+  }
   revalidatePath("/my");
 }

@@ -47,7 +47,7 @@ export default async function My({ searchParams }: { searchParams: { paid?: stri
           <div className="card"><h3>My repair tickets</h3>
             <div className="list" style={{ marginTop: 6 }}>{wos.length ? wos.map((w) => (
               <div className="li" key={w.id}><StatusTag s={w.status} /><div style={{ flex: 1 }}><b>WO-{w.number}</b> · {w.title}<div className="hint">{fmtDateTime(w.createdAt)}{w.assignee ? ` · ${w.assignee}` : ""}</div>
-                {w.status === "DONE" && w.reporterId === u.id && !w.rating && <form action={rateWorkOrder} className="inline-form" style={{ marginTop: 6 }}><input type="hidden" name="id" value={w.id} /><span className="hint">Rate this repair:</span>{[5, 4, 3, 2, 1].map((r) => <button key={r} name="rating" value={r} className="chip">{r}★</button>)}</form>}
+                {w.status === "DONE" && w.reporterId === u.id && !w.rating && <form action={rateWorkOrder} className="inline-form" style={{ marginTop: 6 }}><input type="hidden" name="id" value={w.id} /><span className="hint">How did we do?</span><input name="comment" placeholder="Optional comment" aria-label="Comment" style={{ flex: 1, minWidth: 140 }} />{[5, 4, 3, 2, 1].map((r) => <button key={r} name="rating" value={r} className="chip">{r}★</button>)}</form>}
                 {w.rating && <div className="hint">You rated {w.rating}★</div>}
               </div></div>)) : <div className="hint">No tickets yet.</div>}</div></div>
           <div className="card"><h3>Statements and payments</h3>

@@ -6,7 +6,7 @@ import ThemeSwitch from "./ThemeSwitch";
 
 export type NavItem = { href: string; label: string; group: string; icon: string; count?: number };
 export const ICONS: Record<string, string> = {
-  pulse: "M3 12h4l3-8 4 16 3-8h4", bars: "M4 20V10M10 20V4M16 20v-7M22 20H2", medal: "M12 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10zM8.5 12.5 7 22l5-3 5 3-1.5-9.5",
+  pulse: "M3 12h4l3-8 4 16 3-8h4", heart: "M12 21s-7.5-4.6-9.5-9.2C1 8.3 3.2 4.5 7 4.5c2.1 0 3.6 1.2 5 3 1.4-1.8 2.9-3 5-3 3.8 0 6 3.8 4.5 7.3C19.5 16.4 12 21 12 21z", bars: "M4 20V10M10 20V4M16 20v-7M22 20H2", medal: "M12 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10zM8.5 12.5 7 22l5-3 5 3-1.5-9.5",
   wrench: "M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z", card: "M2 5h20v14H2zM2 10h20M6 15h4",
   chat: "M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12z", bag: "M3 10h18v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM7 10V6a5 5 0 0 1 10 0v4",
   home: "M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z", users: "M16 21v-2a4 4 0 0 0-8 0v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M2 21v-2a4 4 0 0 1 3-3.9",

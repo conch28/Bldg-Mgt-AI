@@ -71,6 +71,7 @@ model User {
   passes       Pass[]
   amenityBookings AmenityBooking[]
   votes        Vote[]
+  pulses       Pulse[]
   createdAt    DateTime      @default(now())
 }
 
@@ -421,4 +422,23 @@ model PMTask {
   vendor        String?
   compliance    Boolean   @default(false) // required by BFP/DOLE/LGU
   lastWorkOrder Int?
+}
+
+/// Resident pulse: a 1-5 rating with an optional comment, after a repair (TICKET) or once a month (MONTHLY).
+model Pulse {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  unitCode    String?
+  kind        String // TICKET | MONTHLY | AMENITY
+  score       Int // 1-5
+  comment     String?
+  topic       String? // Repairs, Elevators, Cleanliness, Security, Water, Communication, Amenities, Noise, Staff, Dues, Other
+  sentiment   String? // POSITIVE | NEUTRAL | NEGATIVE
+  workOrder   Int?
+  followedUp  DateTime?
+  followNote  String?
+  createdAt   DateTime  @default(now())
+
+  @@index([createdAt])
 }

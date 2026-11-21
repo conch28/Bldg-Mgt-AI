@@ -272,3 +272,29 @@ export async function draftAnnouncement(input: { category: string; notes: string
   if (!out) throw new Error("The AI draft could not be read. Please try again.");
   return { ...out, ai: true };
 }
+
+// ---------- Resident feedback classification ----------
+const TOPICS = ["Repairs", "Elevators", "Cleanliness", "Security", "Water", "Communication", "Amenities", "Noise", "Staff", "Dues", "Other"] as const;
+const Feedback = z.object({ topic: z.enum(TOPICS), sentiment: z.enum(["POSITIVE", "NEUTRAL", "NEGATIVE"]) });
+const KEYWORDS: [typeof TOPICS[number], RegExp][] = [
+  ["Elevators", /elevator|lift|elev/i], ["Water", /water|tubig|leak|tulo|pressure|plumb/i], ["Cleanliness", /clean|dirty|madumi|garbage|basura|smell|amoy|trash/i],
+  ["Security", /guard|security|cctv|safe|gate|bantay/i], ["Noise", /noise|ingay|maingay|loud|karaoke|renovat/i], ["Amenities", /pool|gym|function|court|amenit|grill/i],
+  ["Communication", /update|announce|inform|notice|message|abiso|reply/i], ["Staff", /staff|admin|rude|bait|friendly|courteous|manager/i], ["Dues", /dues|bill|payment|bayad|fee/i],
+  ["Repairs", /repair|fix|technician|aircon|ayos|sira|broken/i],
+];
+export function classifyLocal(comment: string | null | undefined, score: number) {
+  const topic = (comment && KEYWORDS.find(([, re]) => re.test(comment))?.[0]) || (comment ? "Other" : null);
+  return { topic, sentiment: score >= 4 ? "POSITIVE" : score === 3 ? "NEUTRAL" : "NEGATIVE" };
+}
+export async function classifyFeedback(comment: string | null | undefined, score: number): Promise<{ topic: string | null; sentiment: string }> {
+  const local = classifyLocal(comment, score);
+  if (!comment || !aiEnabled()) return local;
+  try {
+    const res = await client().messages.parse({
+      model: MODEL, max_tokens: 1000, output_config: { effort: "low", format: zodOutputFormat(Feedback) },
+      system: "Classify a condominium resident's feedback (English, Filipino or Taglish) into one topic and a sentiment. Consider both the comment and the 1-5 score.",
+      messages: [{ role: "user", content: `Score: ${score}/5\nComment: ${comment}` }],
+    } as any) as any;
+    return (res.parsed_output as z.infer<typeof Feedback>) ?? local;
+  } catch { return local; }
+}

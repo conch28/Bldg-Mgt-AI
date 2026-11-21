@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 import { PageHead, StatusTag } from "@/components/ui";
 import { overdueAccounts, slaStats } from "@/lib/metrics";
 import { sendDueScheduled } from "@/lib/comms";
+import { HappinessHero } from "@/components/Happiness";
+import { atRiskResidents } from "@/lib/happiness";
 import { peso, fmtDate, fmtTime, nowManila } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +22,7 @@ export default async function Today() {
   const now = nowManila();
   const { start, end } = dayRange(now);
   const in7 = new Date(now.getTime() + 7 * 86400000), in30 = new Date(now.getTime() + 30 * 86400000);
-  const [open, pending, pm, vendors, amen, passes, paidToday, overdue, sla] = await Promise.all([
+  const [open, pending, pm, vendors, amen, passes, paidToday, overdue, sla, risk] = await Promise.all([
     prisma.workOrder.findMany({ where: { status: { not: "DONE" } }, orderBy: { createdAt: "asc" } }),
     prisma.announcement.findMany({ where: { status: "PENDING_APPROVAL" } }),
     prisma.pMTask.findMany({ where: { nextDue: { lte: in7 } }, orderBy: { nextDue: "asc" } }),
@@ -30,12 +32,14 @@ export default async function Today() {
     prisma.payment.aggregate({ where: { createdAt: { gte: start, lt: end } }, _sum: { amount: true }, _count: true }),
     overdueAccounts(),
     slaStats(30),
+    atRiskResidents(),
   ]);
   const breached = open.filter((w) => now.getTime() - w.createdAt.getTime() > w.slaHours * 3600000);
   const escalated = open.filter((w) => w.status === "ESCALATED");
   const fresh = open.filter((w) => w.status === "NEW");
   const over60 = overdue.filter((o) => o.days > 60);
   const todos = [
+    { n: risk.length, cls: risk.length ? "bad" : "ok", t: "Unhappy residents to call", d: risk.slice(0, 2).map((p) => `Unit ${p.unitCode}${p.comment ? `: "${p.comment.slice(0, 50)}"` : ""}`).join(" · ") || "Everyone has heard back", href: "/happiness", cta: "Call" },
     { n: escalated.length, cls: "bad", t: "Escalated tickets", d: escalated.map((w) => `WO-${w.number} ${w.title}`).slice(0, 2).join(" · ") || "None", href: "/work-orders", cta: "Handle" },
     { n: breached.length, cls: breached.length ? "bad" : "ok", t: "Tickets past their SLA", d: breached.length ? `Oldest: WO-${breached[0].number}, ${breached[0].location}` : "Everything is on time", href: "/work-orders", cta: "Review" },
     { n: fresh.length, cls: fresh.length ? "warn" : "ok", t: "New tickets to assign", d: fresh.slice(0, 2).map((w) => w.title).join(" · ") || "All assigned", href: "/work-orders", cta: "Assign" },
@@ -51,6 +55,7 @@ export default async function Today() {
       <PageHead title={`Today, ${now.toLocaleDateString("en-PH", { timeZone: "Asia/Manila", weekday: "long", month: "long", day: "numeric" })}`}
         sub={`Hi ${u.name.split(" ").slice(-2, -1)[0] ?? u.name}. ${done} of ${todos.length} areas are clear. Start at the top.`} />
       <main className="view">
+        <HappinessHero />
         <div className="grid g-7-5">
           <div className="card"><h3>Your list</h3>
             {todos.map((t) => (

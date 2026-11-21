@@ -3,7 +3,7 @@ import { authSecret } from "@/lib/env";
 
 const RULES: [RegExp, string[]][] = [
   [/^\/admin/, ["ADMIN"]],
-  [/^\/(board|scorecard)/, ["BOARD", "MANAGER", "ADMIN"]],
+  [/^\/(board|scorecard|happiness)/, ["BOARD", "MANAGER", "ADMIN"]],
   [/^\/(work-orders|collections|comms|maintenance|vendors|reports)/, ["BOARD", "MANAGER", "ADMIN"]],
   [/^\/today/, ["MANAGER", "ADMIN"]],
   [/^\/frontdesk/, ["MANAGER", "ADMIN", "GUARD"]],

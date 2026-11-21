@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHead, Kpi } from "@/components/ui";
 import { LineChart } from "@/components/charts";
+import { HappinessHero } from "@/components/Happiness";
 import { collectionTrend, overdueAccounts, slaStats, budgetFor, latestClosedPeriod } from "@/lib/metrics";
 import { peso, pesoK, monthLabel, monthLong, fmtDateTime, nowManila, currentPeriod } from "@/lib/format";
 
@@ -15,7 +16,7 @@ export default async function Board() {
     collectionTrend(12), overdueAccounts(), slaStats(30), budgetFor(closed),
     prisma.workOrder.count({ where: { status: { not: "DONE" } } }),
     prisma.workOrder.findMany({ where: { status: "ESCALATED" }, take: 3, orderBy: { createdAt: "desc" } }),
-    prisma.auditLog.findMany({ where: { action: { in: ["payment", "work_order", "booking", "reminder", "report"] } }, orderBy: { createdAt: "desc" }, take: 6, include: { user: true } }),
+    prisma.auditLog.findMany({ where: { action: { in: ["payment", "work_order", "booking", "reminder", "report", "resident follow-up", "announcement sent", "urgent alert"] } }, orderBy: { createdAt: "desc" }, take: 6, include: { user: true } }),
     prisma.bill.aggregate({ where: { period: currentPeriod() }, _sum: { amount: true, paid: true } }),
   ]);
   const last = trend.find((t) => t.period === closed);
@@ -27,6 +28,7 @@ export default async function Board() {
     <>
       <PageHead title="Today at Skyland" sub={`Board view · ${nowManila().toLocaleDateString("en-PH", { timeZone: "Asia/Manila", dateStyle: "full" })}`} />
       <main className="view">
+        <HappinessHero />
         <div className="grid g4">
           <Kpi k={`${monthLong(closed)} collections`} v={`${last?.rate.toFixed(1) ?? "–"}%`} d={first && last ? <span className={last.rate >= first.rate ? "up" : "down"}>{last.rate >= first.rate ? "▲" : "▼"} {Math.abs(last.rate - first.rate).toFixed(1)} pts in 12 months</span> : null} />
           <Kpi k="Open work orders" v={openWO} d={<><span className="up">{sla.pct.toFixed(0)}% on time</span> · {escalated.length} escalated</>} />

@@ -46,7 +46,7 @@ async function main() {
   }
   console.log("Clearing data…");
   await prisma.$transaction([
-    prisma.delivery.deleteMany(), prisma.announcement.deleteMany(), prisma.amenityBooking.deleteMany(), prisma.amenity.deleteMany(),
+    prisma.pulse.deleteMany(), prisma.delivery.deleteMany(), prisma.announcement.deleteMany(), prisma.amenityBooking.deleteMany(), prisma.amenity.deleteMany(),
     prisma.pass.deleteMany(), prisma.document.deleteMany(), prisma.vote.deleteMany(), prisma.pollOption.deleteMany(), prisma.poll.deleteMany(),
     prisma.vendor.deleteMany(), prisma.pMTask.deleteMany(),
     prisma.auditLog.deleteMany(), prisma.chatMessage.deleteMany(), prisma.booking.deleteMany(),
@@ -148,6 +148,8 @@ async function main() {
   const unitBy = (c: string) => units.find((u) => u.code === c)?.id;
   const ago = (min: number) => new Date(NOW.getTime() - min * 60000);
   const WOS: { loc: string; title: string; cat: string; pri: Priority; min: number; sla: number; status: WOStatus; who?: string; src: string; closedMin?: number; rating?: number }[] = [
+    { loc: "12B", title: "Aircon not cooling (bedroom)", cat: "Mechanical", pri: "MEDIUM", min: 240, sla: 24, status: "ASSIGNED", who: "Rudy M.", src: "Chat" },
+    { loc: "12B", title: "Kitchen faucet dripping", cat: "Plumbing", pri: "LOW", min: 4300, sla: 72, status: "DONE", who: "Rudy M.", src: "Chat", closedMin: 3100 },
     { loc: "27F", title: "No water pressure in kitchen", cat: "Plumbing", pri: "HIGH", min: 170, sla: 4, status: "IN_PROGRESS", who: "Rudy M.", src: "Chat" },
     { loc: "Lobby", title: "Main door access reader intermittent", cat: "Security", pri: "HIGH", min: 290, sla: 4, status: "ESCALATED", who: "Vendor: AccessPro", src: "Guard report" },
     { loc: "9C", title: "Breaker trips when aircon runs", cat: "Electrical", pri: "MEDIUM", min: 420, sla: 24, status: "ASSIGNED", who: "Jun P.", src: "Viber" },

@@ -131,8 +131,8 @@ export async function runAutomations() {
   const day = Number(now.toLocaleDateString("en-PH", { timeZone: "Asia/Manila", day: "numeric" }));
   const period = currentPeriod(now);
   let queued = false;
-  if (day >= 25 && !(await prisma.announcement.findFirst({ where: { kind: "REMINDER", category: `Dues ${period}` } }))) {
-    await prisma.announcement.create({ data: { kind: "REMINDER", category: `Dues ${period}`, title: `${monthLong(period)} dues are due on the last day of the month`,
+  if (day >= 25 && !(await prisma.announcement.findFirst({ where: { kind: "REMINDER", title: { startsWith: monthLong(period) } } }))) {
+    await prisma.announcement.create({ data: { kind: "REMINDER", category: "Dues reminder", title: `${monthLong(period)} dues are due on the last day of the month`,
       bodyEn: `Hi! A friendly reminder that ${monthLong(period)} association dues are due on the last day of the month. Pay in seconds from the owner portal with GCash, Maya or card. If you've already paid, thank you!`,
       bodyTl: `Hi po! Paalala lang na ang ${monthLong(period)} dues ay due sa huling araw ng buwan. Pwede po kayong magbayad sa owner portal gamit ang GCash, Maya o card. Kung nakabayad na kayo, salamat po!`,
       smsEn: `Reminder: ${monthLong(period)} dues are due at month-end. Pay via GCash/Maya/card in the owner portal. Thank you!`,
