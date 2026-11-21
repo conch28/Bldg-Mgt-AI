@@ -8,6 +8,7 @@ import { PrismaClient, Priority, WOStatus, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { seedV2 } from "./seed-v2";
 import { seedV3 } from "./seed-v3";
+import { seedV4 } from "./seed-v4";
 import { SITE, allUnits } from "../lib/skyland";
 
 const prisma = new PrismaClient();
@@ -42,7 +43,7 @@ async function main() {
     throw new Error("Refusing to seed a production database. Set SEED_ALLOW_PRODUCTION=1 to override.");
   }
   // Demo deploys re-seed only when the sample data is missing or from an older version of the app.
-  const SEED_VERSION = "skyland-demo-v8";
+  const SEED_VERSION = "skyland-demo-v9";
   if (process.env.SEED_IF_EMPTY === "1" && (await prisma.building.count()) > 0) {
     const current = await prisma.auditLog.findFirst({ where: { action: "seed", detail: { contains: SEED_VERSION } } });
     if (current) { console.log("Demo data is up to date. Skipping the seed."); return; }
@@ -58,7 +59,10 @@ async function main() {
     prisma.auditLog.deleteMany(), prisma.chatMessage.deleteMany(), prisma.booking.deleteMany(),
     prisma.service.deleteMany(), prisma.report.deleteMany(), prisma.budgetLine.deleteMany(),
     prisma.reminder.deleteMany(), prisma.payment.deleteMany(), prisma.bill.deleteMany(),
-    prisma.wOEvent.deleteMany(), prisma.workOrder.deleteMany(), prisma.unit.deleteMany(),
+    prisma.wOEvent.deleteMany(), prisma.workOrder.deleteMany(),
+    prisma.meterReading.deleteMany(), prisma.guardRound.deleteMany(), prisma.quote.deleteMany(), prisma.purchaseRequest.deleteMany(),
+    prisma.replacement.deleteMany(), prisma.stockMove.deleteMany(), prisma.stockItem.deleteMany(), prisma.asset.deleteMany(),
+    prisma.unit.deleteMany(),
     prisma.privacyRequest.deleteMany(), prisma.loginCode.deleteMany(), prisma.errorLog.deleteMany(), prisma.rateLimit.deleteMany(),
     prisma.user.deleteMany(), prisma.building.deleteMany(),
   ]);
@@ -209,6 +213,8 @@ async function main() {
   await seedV2({ prisma, rnd, hash, buildingId: building.id, units, owner, manager, NOW });
   await seedV3({ prisma, rnd, units: await prisma.unit.findMany({ orderBy: [{ floor: "asc" }, { code: "asc" }] }), owner, manager, NOW });
 
+  await seedV4({ prisma, rnd, hash, buildingId: building.id, manager, NOW });
+
   console.log("Recording who lives in each unit…");
   // Units listed for lease are empty (their old lease ended); Ana's unit keeps its tenant until the lease ends.
   const anaLeased = await prisma.unit.findMany({ where: { ownerId: owner.id, code: { not: ANA } }, select: { id: true } });
@@ -225,7 +231,7 @@ async function main() {
 
   await prisma.auditLog.create({ data: { userId: admin.id, action: "seed", detail: `Database seeded with Skyland sample data (${SEED_VERSION})` } });
   console.log(`Done. ${units.length} units, ${bills.length} bills, ${payments.length} payments.`);
-  console.log(`Logins (password: ${password}): admin@ manager@ president@ treasurer@ owner@ guard@ skyland.test`);
+  console.log(`Logins (password: ${password}): admin@ manager@ president@ treasurer@ owner@ guard@ guard2@ skyland.test`);
   void manager; void president; void treasurer;
 }
 

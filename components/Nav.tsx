@@ -19,7 +19,9 @@ export const ICONS: Record<string, string> = {
   key: "M15 7a4 4 0 1 1-3.9 4.9L3 20v-3h3v-3h3l2.1-2.1A4 4 0 0 1 15 7zM16 9.5v.01", box: "M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10",
   paw: "M12 13c-3 0-5 3-5 5 0 1.5 1.2 2.5 2.6 2.1 1-.3 1.6-.6 2.4-.6s1.4.3 2.4.6c1.4.4 2.6-.6 2.6-2.1 0-2-2-5-5-5zM6 10a1.8 2.2 0 1 0 0-.1M18 10a1.8 2.2 0 1 0 0-.1M9.5 6a1.8 2.2 0 1 0 0-.1M14.5 6a1.8 2.2 0 1 0 0-.1",
   store: "M3 9l2-5h14l2 5M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0zM5 13v8h14v-8M10 21v-5h4v5", alert: "M12 3l10 18H2zM12 10v5M12 18v.01",
-  bolt: "M13 2L4 14h7l-1 8 9-12h-7z", more: "M5 12v.01M12 12v.01M19 12v.01", x: "M6 6l12 12M18 6L6 18", tag: "M3 12V3h9l9 9-9 9zM7.5 7.5v.01", spark: "M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6",
+  bolt: "M13 2L4 14h7l-1 8 9-12h-7z", route: "M6 19a2 2 0 1 0 0-.1M18 5a2 2 0 1 0 0-.1M6 17V9a3 3 0 0 1 3-3h3M18 7v8a3 3 0 0 1-3 3h-3",
+  cart: "M3 4h2l2.4 11.2a1 1 0 0 0 1 .8h9.2a1 1 0 0 0 1-.8L20 8H6.2M9 20.5a1 1 0 1 0 0-.1M17 20.5a1 1 0 1 0 0-.1", bulb: "M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V16h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z",
+  layers: "M12 3l9 5-9 5-9-5zM3 13l9 5 9-5", cloud: "M7 18a4 4 0 0 1-.6-8A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9z", more: "M5 12v.01M12 12v.01M19 12v.01", x: "M6 6l12 12M18 6L6 18", tag: "M3 12V3h9l9 9-9 9zM7.5 7.5v.01", spark: "M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6",
 };
 export function Icon({ name, size = 17 }: { name: string; size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={ICONS[name]} /></svg>;

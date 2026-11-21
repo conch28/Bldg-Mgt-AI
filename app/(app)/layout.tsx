@@ -28,6 +28,8 @@ const ALL: Item[] = [
 
   { href: "/today", label: "Today", group: "Run the building", icon: "check", roles: M },
   { href: "/frontdesk", label: "Front desk", group: "Run the building", icon: "shield", roles: STAFF },
+  { href: "/rounds", label: "Guard rounds", group: "Run the building", icon: "route", roles: STAFF },
+  { href: "/procurement", label: "Receive deliveries", group: "Run the building", icon: "cart", roles: ["GUARD"] },
   { href: "/sos", label: "SOS alerts", group: "Run the building", icon: "alert", roles: STAFF },
   { href: "/work-orders", label: "Work orders", group: "Run the building", icon: "wrench", roles: B },
   { href: "/comms", label: "Resident updates", group: "Run the building", icon: "mega", roles: B },
@@ -38,11 +40,14 @@ const ALL: Item[] = [
   { href: "/happiness", label: "Resident happiness", group: "Board", icon: "heart", roles: B },
   { href: "/board", label: "Building overview", group: "Board", icon: "pulse", roles: B },
   { href: "/reports", label: "Reports & finances", group: "Board", icon: "bars", roles: B },
+  { href: "/advisor", label: "AI advisor & weather", group: "Board", icon: "bulb", roles: B },
+  { href: "/procurement", label: "Procurement & controls", group: "Board", icon: "cart", roles: B },
   { href: "/scorecard", label: "Manager scorecard", group: "Board", icon: "medal", roles: B },
   { href: "/listings", label: "Units for sale & lease", group: "Board", icon: "key", roles: B },
   { href: "/polls", label: "Voting & polls", group: "Board", icon: "vote", roles: B },
   { href: "/maintenance", label: "Maintenance calendar", group: "Records", icon: "gear", roles: B },
   { href: "/amenities", label: "Amenity bookings", group: "Records", icon: "cal", roles: M },
+  { href: "/inventory", label: "Stock & assets", group: "Records", icon: "layers", roles: B },
   { href: "/vendors", label: "Vendors & contracts", group: "Records", icon: "truck", roles: B },
   { href: "/documents", label: "Documents", group: "Records", icon: "folder", roles: B },
   { href: "/admin/users", label: "Users & units", group: "Records", icon: "users", roles: ["ADMIN"] },
@@ -52,10 +57,10 @@ const ALL: Item[] = [
 // Bottom tab bar on phones: four destinations per role plus "More".
 const TABS: Record<string, Tab[]> = {
   OWNER: [{ href: "/home", label: "Home", icon: "home" }, { href: "/my", label: "Bills", icon: "card" }, { href: "/chat", label: "Help", icon: "chat" }, { href: "/property", label: "My unit", icon: "key" }],
-  BOARD: [{ href: "/happiness", label: "Happiness", icon: "heart" }, { href: "/board", label: "Overview", icon: "pulse" }, { href: "/reports", label: "Reports", icon: "bars" }, { href: "/polls", label: "Voting", icon: "vote" }],
+  BOARD: [{ href: "/happiness", label: "Happiness", icon: "heart" }, { href: "/board", label: "Overview", icon: "pulse" }, { href: "/advisor", label: "Advisor", icon: "bulb" }, { href: "/procurement", label: "Spending", icon: "cart" }],
   MANAGER: [{ href: "/today", label: "Today", icon: "check" }, { href: "/work-orders", label: "Requests", icon: "wrench" }, { href: "/frontdesk", label: "Front desk", icon: "shield" }, { href: "/comms", label: "Updates", icon: "mega" }],
   ADMIN: [{ href: "/today", label: "Today", icon: "check" }, { href: "/work-orders", label: "Requests", icon: "wrench" }, { href: "/comms", label: "Updates", icon: "mega" }, { href: "/admin/users", label: "Users", icon: "users" }],
-  GUARD: [{ href: "/frontdesk", label: "Front desk", icon: "shield" }, { href: "/sos", label: "SOS", icon: "alert" }, { href: "/moving", label: "Moves", icon: "box" }, { href: "/community", label: "Lost & found", icon: "store" }],
+  GUARD: [{ href: "/frontdesk", label: "Front desk", icon: "shield" }, { href: "/rounds", label: "Rounds", icon: "route" }, { href: "/sos", label: "SOS", icon: "alert" }, { href: "/moving", label: "Moves", icon: "box" }],
 };
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -72,7 +77,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     isStaff ? prisma.sosAlert.count({ where: { status: { not: "RESOLVED" } } }) : 0,
     u.role === "OWNER" ? prisma.inquiry.count({ where: { listing: { userId: u.id }, status: "NEW" } }) : 0,
   ]);
-  const counts: Record<string, number> = { "/comms": pending, "/work-orders": escalated, "/updates": unread, "/today": pending + escalated + risk, "/happiness": risk, "/sos": sos, "/property": inquiries };
+  const toSign = u.role === "BOARD" || isMgr ? await prisma.purchaseRequest.count({ where: { status: "PENDING", requestedBy: { not: u.id } } }) : u.role === "GUARD" ? await prisma.purchaseRequest.count({ where: { status: "ORDERED" } }) : 0;
+  const counts: Record<string, number> = { "/comms": pending, "/work-orders": escalated, "/updates": unread, "/today": pending + escalated + risk, "/happiness": risk, "/sos": sos, "/property": inquiries, "/procurement": toSign };
   const items = ALL.filter((i) => i.roles.includes(u.role)).map(({ roles, ...i }) => ({ ...i, count: counts[i.href] || 0 }));
   const tabs = (TABS[u.role] ?? []).map((t) => ({ ...t, count: counts[t.href] || 0 }));
   return (
