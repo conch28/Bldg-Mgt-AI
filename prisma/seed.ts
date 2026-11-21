@@ -42,7 +42,7 @@ async function main() {
     throw new Error("Refusing to seed a production database. Set SEED_ALLOW_PRODUCTION=1 to override.");
   }
   // Demo deploys re-seed only when the sample data is missing or from an older version of the app.
-  const SEED_VERSION = "skyland-demo-v6";
+  const SEED_VERSION = "skyland-demo-v7";
   if (process.env.SEED_IF_EMPTY === "1" && (await prisma.building.count()) > 0) {
     const current = await prisma.auditLog.findFirst({ where: { action: "seed", detail: { contains: SEED_VERSION } } });
     if (current) { console.log("Demo data is up to date. Skipping the seed."); return; }
@@ -208,6 +208,20 @@ async function main() {
 
   await seedV2({ prisma, rnd, hash, buildingId: building.id, units, owner, manager, NOW });
   await seedV3({ prisma, rnd, units: await prisma.unit.findMany({ orderBy: [{ floor: "asc" }, { code: "asc" }] }), owner, manager, NOW });
+
+  console.log("Recording who lives in each unit…");
+  // Units listed for lease are empty (their old lease ended); Ana's unit keeps its tenant until the lease ends.
+  const anaLeased = await prisma.unit.findMany({ where: { ownerId: owner.id, code: { not: ANA } }, select: { id: true } });
+  const liveLease = await prisma.listing.findMany({ where: { status: "LIVE", kind: "LEASE", unitId: { notIn: anaLeased.map((u) => u.id) } }, select: { unitId: true } });
+  await prisma.lease.deleteMany({ where: { unitId: { in: liveLease.map((l) => l.unitId) }, end: { gte: NOW } } });
+  const liveSale = new Set((await prisma.listing.findMany({ where: { status: "LIVE", kind: "SALE" }, select: { unitId: true } })).map((l) => l.unitId));
+  const leasedNow = new Set((await prisma.lease.findMany({ where: { end: { gte: NOW }, start: { lte: NOW } }, select: { unitId: true } })).map((l) => l.unitId));
+  const emptyForLease = new Set(liveLease.map((l) => l.unitId));
+  for (const u of units) {
+    const r = rnd();
+    const occupancy = leasedNow.has(u.id) ? null : u.code === ANA ? "OWNER" : emptyForLease.has(u.id) ? "VACANT" : liveSale.has(u.id) ? (r < 0.5 ? "VACANT" : "OWNER") : r < 0.09 ? "VACANT" : r < 0.13 ? null : "OWNER";
+    if (occupancy) await prisma.unit.update({ where: { id: u.id }, data: { occupancy } });
+  }
 
   await prisma.auditLog.create({ data: { userId: admin.id, action: "seed", detail: `Database seeded with Skyland sample data (${SEED_VERSION})` } });
   console.log(`Done. ${units.length} units, ${bills.length} bills, ${payments.length} payments.`);

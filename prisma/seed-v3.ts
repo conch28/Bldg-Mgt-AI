@@ -34,7 +34,7 @@ export async function seedV3({ prisma, rnd, units, owner, NOW }: Ctx) {
   await prisma.lease.create({ data: { unitId: leasedUnit.id, tenantName: "Kenji Watanabe", rent: 46000, deposit: 92000, start: leaseStart, end: new Date(NOW.getTime() + 40 * DAY) } });
   await prisma.lease.create({ data: { unitId: leasedUnit.id, tenantName: "Liza Romero", rent: 44000, deposit: 88000, start: new Date(leaseStart.getTime() - 425 * DAY), end: new Date(leaseStart.getTime() - 62 * DAY) } });
   // a few more leased units in the building for the board's view
-  const others = units.filter((u) => u.ownerId && u.ownerId !== owner.id && u.id !== leasedUnit.id).slice(0, 30);
+  const others = units.filter((u) => u.ownerId && u.ownerId !== owner.id && u.id !== leasedUnit.id).sort(() => rnd() - 0.5).slice(0, 52);
   await prisma.lease.createMany({ data: others.map((u) => ({ unitId: u.id, tenantName: `${pick(["J.", "M.", "R.", "A.", "C."])} ${pick(["Lim", "Cruz", "Tan", "Reyes", "Garcia", "Sy"])}`, rent: round(Number(u.sqm) * 540, 500), deposit: round(Number(u.sqm) * 1080, 500), start: ago(30 + rnd() * 300), end: new Date(NOW.getTime() + (30 + rnd() * 300) * DAY) })) });
 
   const code12B = units.find((u) => u.code === "1202B")!;
@@ -70,7 +70,7 @@ export async function seedV3({ prisma, rnd, units, owner, NOW }: Ctx) {
   others2.slice(0, 22).forEach((u, i) => {
     const kind = i % 3 === 0 ? "SALE" : "LEASE", sqm = Number(u.sqm), b = beds(sqm);
     const price = kind === "LEASE" ? round(sqm * 550, 500) : round(sqm * 114000, 50000);
-    const closed = i >= 8, pub = ago(closed ? 30 + rnd() * 320 : rnd() * 25);
+    const closed = i >= 10, pub = ago(closed ? 30 + rnd() * 320 : rnd() * 25);
     ls.push({ unitId: u.id, userId: u.ownerId!, kind, status: closed ? "CLOSED" : i === 7 ? "DRAFT" : "LIVE", price, suggestedLow: round(price * 0.95, 500), suggestedHigh: round(price * 1.05, 500), beds: b, furnished: pick(["BARE", "SEMI", "FULL"]),
       title: `${b ? b + "BR" : "Studio"} for ${kind === "LEASE" ? "lease" : "sale"} at Skyland Plaza`, body: "Listing text", highlights: [], rationale: "Priced from Skyland and nearby comparables.", channels: ["FB_PAGE", "FB_MARKETPLACE", "FB_GROUPS"],
       views: Math.round(80 + rnd() * 500), publishedAt: pub, closedAt: closed ? new Date(pub.getTime() + (kind === "LEASE" ? 12 + rnd() * 18 : 45 + rnd() * 60) * DAY) : null, closedPrice: closed ? price : null, ai: true, createdAt: pub });
