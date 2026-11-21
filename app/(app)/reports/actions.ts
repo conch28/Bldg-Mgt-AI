@@ -12,5 +12,5 @@ export async function createReport() {
   const r = await generateBoardReport(period);
   await prisma.report.create({ data: { period, content: r.content, model: r.model, createdBy: u.name } });
   await audit(u.id, "report", `Drafted the ${monthLong(period)} board report`);
-  revalidatePath("/finances");
+  revalidatePath("/reports");
 }

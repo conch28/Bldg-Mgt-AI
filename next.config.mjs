@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   poweredByHeader: false,
+  experimental: { serverActions: { bodySizeLimit: "4.5mb" } },
+  async redirects() { return [{ source: "/finances", destination: "/reports", permanent: true }]; },
   async headers() {
     return [{ source: "/(.*)", headers: [
       { key: "X-Frame-Options", value: "DENY" },

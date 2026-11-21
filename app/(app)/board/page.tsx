@@ -59,7 +59,7 @@ export default async function Board() {
             </div>
           </div>
           <div className="card"><h3>Spending, {monthLong(closed)}</h3><div className="hint">{peso(budget.actual)} against a budget of {peso(budget.budget)} ({budget.variance >= 0 ? "+" : ""}{budget.variance.toFixed(1)}%)</div>
-            <div style={{ marginTop: 12 }}><Link className="btn pri" href="/finances">Open finances and AI report</Link></div>
+            <div style={{ marginTop: 12 }}><Link className="btn pri" href="/reports">Open reports and AI board report</Link></div>
           </div>
         </div>
       </main>

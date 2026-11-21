@@ -1,12 +1,17 @@
 import { withAuth } from "next-auth/middleware";
+import { authSecret } from "@/lib/env";
 
 const RULES: [RegExp, string[]][] = [
   [/^\/admin/, ["ADMIN"]],
-  [/^\/(board|finances|scorecard)/, ["BOARD", "MANAGER", "ADMIN"]],
-  [/^\/(work-orders|collections)/, ["BOARD", "MANAGER", "ADMIN"]],
+  [/^\/(board|scorecard)/, ["BOARD", "MANAGER", "ADMIN"]],
+  [/^\/(work-orders|collections|comms|maintenance|vendors|reports)/, ["BOARD", "MANAGER", "ADMIN"]],
+  [/^\/today/, ["MANAGER", "ADMIN"]],
+  [/^\/frontdesk/, ["MANAGER", "ADMIN", "GUARD"]],
+  [/^\/(home|my|chat|services|passes|updates)(\/|$)/, ["OWNER"]],
 ];
 
 export default withAuth({
+  secret: authSecret(),
   pages: { signIn: "/login" },
   callbacks: {
     authorized({ token, req }) {
@@ -17,4 +22,4 @@ export default withAuth({
   },
 });
 
-export const config = { matcher: ["/((?!api/auth|login|_next|favicon.ico|robots.txt).*)"] };
+export const config = { matcher: ["/((?!api/auth|api/cron|api/paymongo|login|_next|favicon.ico|robots.txt).*)"] };

@@ -6,6 +6,7 @@
  */
 import { PrismaClient, Priority, WOStatus, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { seedV2 } from "./seed-v2";
 
 const prisma = new PrismaClient();
 
@@ -39,8 +40,15 @@ async function main() {
   if (process.env.NODE_ENV === "production" && process.env.SEED_ALLOW_PRODUCTION !== "1") {
     throw new Error("Refusing to seed a production database. Set SEED_ALLOW_PRODUCTION=1 to override.");
   }
+  if (process.env.SEED_IF_EMPTY === "1" && (await prisma.building.count()) > 0) {
+    console.log("Database already has data. Skipping the demo seed.");
+    return;
+  }
   console.log("Clearing data…");
   await prisma.$transaction([
+    prisma.delivery.deleteMany(), prisma.announcement.deleteMany(), prisma.amenityBooking.deleteMany(), prisma.amenity.deleteMany(),
+    prisma.pass.deleteMany(), prisma.document.deleteMany(), prisma.vote.deleteMany(), prisma.pollOption.deleteMany(), prisma.poll.deleteMany(),
+    prisma.vendor.deleteMany(), prisma.pMTask.deleteMany(),
     prisma.auditLog.deleteMany(), prisma.chatMessage.deleteMany(), prisma.booking.deleteMany(),
     prisma.service.deleteMany(), prisma.report.deleteMany(), prisma.budgetLine.deleteMany(),
     prisma.reminder.deleteMany(), prisma.payment.deleteMany(), prisma.bill.deleteMany(),
@@ -181,9 +189,11 @@ async function main() {
     { name: "Move-in / move-out", detail: "Elevator booking, gate pass, crew", price: 3500, unitLabel: "half day", vendor: "Lipat Express" },
   ] });
 
+  await seedV2({ prisma, rnd, hash, buildingId: building.id, units, owner, manager, NOW });
+
   await prisma.auditLog.create({ data: { userId: admin.id, action: "seed", detail: "Database seeded with Skyland sample data" } });
   console.log(`Done. ${units.length} units, ${bills.length} bills, ${payments.length} payments.`);
-  console.log(`Logins (password: ${password}): admin@ manager@ president@ treasurer@ owner@ skyland.test`);
+  console.log(`Logins (password: ${password}): admin@ manager@ president@ treasurer@ owner@ guard@ skyland.test`);
   void manager; void president; void treasurer;
 }
 

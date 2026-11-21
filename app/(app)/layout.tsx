@@ -3,26 +3,53 @@ import Providers from "../providers";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
-const ALL: (NavItem & { roles: string[] })[] = [
-  { href: "/board", label: "Today at Skyland", group: "Board", icon: "pulse", roles: ["BOARD", "MANAGER", "ADMIN"] },
-  { href: "/finances", label: "Finances & reports", group: "Board", icon: "bars", roles: ["BOARD", "MANAGER", "ADMIN"] },
-  { href: "/scorecard", label: "Manager scorecard", group: "Board", icon: "medal", roles: ["BOARD", "MANAGER", "ADMIN"] },
-  { href: "/work-orders", label: "Work orders", group: "Operations", icon: "wrench", roles: ["BOARD", "MANAGER", "ADMIN"] },
-  { href: "/collections", label: "Dues & collections", group: "Operations", icon: "card", roles: ["BOARD", "MANAGER", "ADMIN"] },
-  { href: "/my", label: "My unit", group: "Owner", icon: "home", roles: ["OWNER"] },
-  { href: "/chat", label: "Helpdesk chat", group: "Owner", icon: "chat", roles: ["OWNER"] },
-  { href: "/services", label: "Services", group: "Owner", icon: "bag", roles: ["OWNER"] },
+type Item = NavItem & { roles: string[] };
+const B = ["BOARD", "MANAGER", "ADMIN"], M = ["MANAGER", "ADMIN"], O = ["OWNER"];
+const ALL: Item[] = [
+  { href: "/home", label: "Home", group: "Home", icon: "home", roles: O },
+  { href: "/chat", label: "Ask the helpdesk", group: "Home", icon: "chat", roles: O },
+  { href: "/updates", label: "Building updates", group: "Home", icon: "mega", roles: O },
+  { href: "/my", label: "Dues & statements", group: "My unit", icon: "card", roles: O },
+  { href: "/amenities", label: "Book an amenity", group: "My unit", icon: "cal", roles: O },
+  { href: "/passes", label: "Guest & delivery passes", group: "My unit", icon: "pass", roles: O },
+  { href: "/services", label: "In-unit services", group: "My unit", icon: "bag", roles: O },
+  { href: "/polls", label: "Voting", group: "Community", icon: "vote", roles: O },
+  { href: "/documents", label: "Documents", group: "Community", icon: "folder", roles: O },
+
+  { href: "/today", label: "Today", group: "Run the building", icon: "check", roles: M },
+  { href: "/board", label: "Building overview", group: "Board", icon: "pulse", roles: B },
+  { href: "/reports", label: "Reports & finances", group: "Board", icon: "bars", roles: B },
+  { href: "/scorecard", label: "Manager scorecard", group: "Board", icon: "medal", roles: B },
+  { href: "/polls", label: "Voting & polls", group: "Board", icon: "vote", roles: ["BOARD"] },
+  { href: "/work-orders", label: "Work orders", group: "Run the building", icon: "wrench", roles: B },
+  { href: "/comms", label: "Resident updates", group: "Run the building", icon: "mega", roles: B },
+  { href: "/collections", label: "Dues & collections", group: "Run the building", icon: "card", roles: B },
+  { href: "/frontdesk", label: "Front desk", group: "Run the building", icon: "shield", roles: ["MANAGER", "ADMIN", "GUARD"] },
+  { href: "/maintenance", label: "Maintenance calendar", group: "Run the building", icon: "gear", roles: B },
+  { href: "/amenities", label: "Amenity bookings", group: "Run the building", icon: "cal", roles: M },
+  { href: "/vendors", label: "Vendors & contracts", group: "Records", icon: "truck", roles: B },
+  { href: "/documents", label: "Documents", group: "Records", icon: "folder", roles: B },
+  { href: "/polls", label: "Voting & polls", group: "Records", icon: "vote", roles: M },
   { href: "/admin/users", label: "Users & units", group: "Admin", icon: "users", roles: ["ADMIN"] },
 ];
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const u = await requireRole();
-  const b = await prisma.building.findUnique({ where: { id: u.buildingId } });
+  const isMgr = u.role === "MANAGER" || u.role === "ADMIN";
+  const [b, pending, escalated, unread] = await Promise.all([
+    prisma.building.findUnique({ where: { id: u.buildingId } }),
+    isMgr ? prisma.announcement.count({ where: { status: "PENDING_APPROVAL" } }) : 0,
+    isMgr ? prisma.workOrder.count({ where: { status: "ESCALATED" } }) : 0,
+    u.role === "OWNER" ? prisma.delivery.count({ where: { userId: u.id, channel: "APP", readAt: null } }) : 0,
+  ]);
+  const counts: Record<string, number> = { "/comms": pending, "/work-orders": escalated, "/updates": unread, "/today": pending + escalated };
+  const items = ALL.filter((i) => i.roles.includes(u.role)).map(({ roles, ...i }) => ({ ...i, count: counts[i.href] || 0 }));
   return (
     <Providers>
+      <a href="#main" className="sr-only">Skip to content</a>
       <div className="app">
-        <Nav items={ALL.filter((i) => i.roles.includes(u.role))} user={{ name: u.name, role: u.role }} building={b?.name ?? ""} />
-        <div className="main">{children}</div>
+        <Nav items={items} user={{ name: u.name, role: u.role }} building={b?.name ?? ""} />
+        <div className="main" id="main">{children}</div>
       </div>
     </Providers>
   );

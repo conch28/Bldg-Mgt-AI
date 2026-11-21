@@ -1,3 +1,4 @@
+import { authSecret } from "./env";
 import type { NextAuthOptions } from "next-auth";
 import { getServerSession } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
@@ -7,6 +8,7 @@ import type { Role } from "@prisma/client";
 import { prisma } from "./db";
 
 export const authOptions: NextAuthOptions = {
+  secret: authSecret(),
   session: { strategy: "jwt", maxAge: 60 * 60 * 12 },
   pages: { signIn: "/login" },
   providers: [
@@ -52,7 +54,7 @@ export async function requireRole(...roles: Role[]): Promise<SessionUser> {
   return u;
 }
 
-export const homeFor = (role: Role) => (role === "OWNER" ? "/my" : role === "BOARD" ? "/board" : role === "ADMIN" ? "/admin/users" : "/work-orders");
+export const homeFor = (role: Role) => (role === "OWNER" ? "/home" : role === "BOARD" ? "/board" : role === "GUARD" ? "/frontdesk" : "/today");
 
 export async function audit(userId: string | null, action: string, detail?: string) {
   await prisma.auditLog.create({ data: { userId, action, detail } });

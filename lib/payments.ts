@@ -1,3 +1,4 @@
+import { demoMode } from "./env";
 /**
  * Online payments through PayMongo Checkout (GCash, Maya, cards).
  * Without PAYMONGO_SECRET_KEY the app runs in test mode: the Pay button records
@@ -7,7 +8,7 @@
 import crypto from "crypto";
 
 export const paymongoEnabled = () => Boolean(process.env.PAYMONGO_SECRET_KEY);
-export const testPaymentsAllowed = () => !paymongoEnabled() && (process.env.NODE_ENV !== "production" || process.env.ALLOW_TEST_PAYMENTS === "1");
+export const testPaymentsAllowed = () => !paymongoEnabled() && (process.env.NODE_ENV !== "production" || process.env.ALLOW_TEST_PAYMENTS === "1" || demoMode());
 
 export async function createCheckout(opts: { amount: number; description: string; reference: string; successUrl: string; cancelUrl: string; email?: string }) {
   const auth = Buffer.from(process.env.PAYMONGO_SECRET_KEY + ":").toString("base64");

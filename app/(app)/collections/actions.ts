@@ -29,7 +29,7 @@ export async function sendAction(unitId: string, text: string, tone: string) {
   const msg = z.string().min(10).max(1000).parse(text);
   const a = await account(unitId);
   const r = await sendSms(a.phone, msg);
-  await prisma.reminder.create({ data: { billId: a.billIds[0], channel: r.delivered ? "SMS" : "Logged", tone, message: msg, sentBy: u.name } });
+  await prisma.reminder.create({ data: { billId: a.billIds[0], channel: r.status === "SENT" ? "SMS" : "Logged", tone, message: msg, sentBy: u.name } });
   await audit(u.id, "reminder", `Reminder to ${a.code} (${peso(a.amount)}, ${a.days} days): ${r.info}`);
   revalidatePath("/collections");
   return r.info;

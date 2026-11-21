@@ -14,6 +14,7 @@ enum Role {
   BOARD
   MANAGER
   ADMIN
+  GUARD
 }
 
 enum WOStatus {
@@ -61,6 +62,15 @@ model User {
   chat         ChatMessage[]
   bookings     Booking[]
   audit        AuditLog[]
+  language     String        @default("EN") // EN | TL (Taglish)
+  notifySms    Boolean       @default(true)
+  notifyEmail  Boolean       @default(true)
+  notifyMessenger Boolean    @default(false)
+  messengerPsid String?      // Page-scoped ID, set when the owner links Messenger
+  deliveries   Delivery[]
+  passes       Pass[]
+  amenityBookings AmenityBooking[]
+  votes        Vote[]
   createdAt    DateTime      @default(now())
 }
 
@@ -77,6 +87,9 @@ model Unit {
   bills      Bill[]
   workOrders WorkOrder[]
   bookings   Booking[]
+  passes     Pass[]
+  amenityBookings AmenityBooking[]
+  votes      Vote[]
 
   @@unique([buildingId, code])
 }
@@ -218,4 +231,194 @@ model AuditLog {
   action    String
   detail    String?
   createdAt DateTime @default(now())
+}
+
+/* ---------------- Resident communications ---------------- */
+
+enum AnnStatus {
+  DRAFT
+  PENDING_APPROVAL
+  SCHEDULED
+  SENDING
+  SENT
+  CANCELLED
+}
+
+model Announcement {
+  id          String     @id @default(cuid())
+  kind        String // URGENT | ROUTINE | REMINDER | TICKET
+  category    String // e.g. Water interruption, Newsletter, Meeting notice
+  title       String
+  bodyEn      String
+  bodyTl      String? // Taglish version
+  smsEn       String? // short SMS version (<= 300 chars)
+  smsTl       String?
+  audience    String     @default("ALL") // ALL | FLOORS:12,13 | UNITS:12B,9C | OVERDUE | BOARD
+  channels    String[]   @default(["APP", "SMS", "EMAIL"]) // APP SMS EMAIL MESSENGER
+  status      AnnStatus  @default(DRAFT)
+  scheduledAt DateTime?
+  sentAt      DateTime?
+  aiDrafted   Boolean    @default(false)
+  createdBy   String
+  approvedBy  String?
+  createdAt   DateTime   @default(now())
+  deliveries  Delivery[]
+
+  @@index([status, scheduledAt])
+}
+
+model Delivery {
+  id             String       @id @default(cuid())
+  announcementId String
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?        @relation(fields: [userId], references: [id])
+  unitCode       String?
+  channel        String // APP SMS EMAIL MESSENGER
+  to             String?
+  status         String // SENT | LOGGED | FAILED | READ
+  info           String?
+  createdAt      DateTime     @default(now())
+  readAt         DateTime?
+
+  @@index([userId, channel])
+}
+
+/* ---------------- Amenities ---------------- */
+
+model Amenity {
+  id        String           @id @default(cuid())
+  name      String
+  detail    String
+  capacity  Int
+  fee       Decimal          @default(0) @db.Decimal(10, 2)
+  openHour  Int // 0-23, Manila time
+  closeHour Int
+  slotHours Int              @default(1)
+  closedDow Int? // 0=Sun..6=Sat
+  rules     String?
+  bookings  AmenityBooking[]
+}
+
+model AmenityBooking {
+  id        String   @id @default(cuid())
+  amenityId String
+  amenity   Amenity  @relation(fields: [amenityId], references: [id])
+  unitId    String
+  unit      Unit     @relation(fields: [unitId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  start     DateTime
+  end       DateTime
+  guests    Int      @default(0)
+  status    String   @default("CONFIRMED") // CONFIRMED | CANCELLED
+  createdAt DateTime @default(now())
+
+  @@index([amenityId, start])
+}
+
+/* ---------------- Visitor and delivery passes ---------------- */
+
+model Pass {
+  id         String    @id @default(cuid())
+  code       String    @unique // 6-char code shown to the guard
+  kind       String // GUEST | DELIVERY | CONTRACTOR | MOVE
+  name       String // guest or courier name
+  plate      String?
+  unitId     String
+  unit       Unit      @relation(fields: [unitId], references: [id])
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  validFrom  DateTime
+  validTo    DateTime
+  checkedIn  DateTime?
+  checkedOut DateTime?
+  note       String?
+  createdAt  DateTime  @default(now())
+}
+
+/* ---------------- Documents ---------------- */
+
+model Document {
+  id         String   @id @default(cuid())
+  title      String
+  category   String // Governance | Financial | Minutes | Contracts | Notices | Forms
+  visibility String   @default("OWNERS") // OWNERS | BOARD
+  fileName   String
+  mime       String
+  size       Int
+  data       Bytes
+  uploadedBy String
+  createdAt  DateTime @default(now())
+}
+
+/* ---------------- Voting and polls ---------------- */
+
+model Poll {
+  id          String       @id @default(cuid())
+  question    String
+  detail      String?
+  kind        String       @default("POLL") // POLL (one vote per owner) | RESOLUTION (one vote per unit, weighted by sqm)
+  closesAt    DateTime
+  createdBy   String
+  createdAt   DateTime     @default(now())
+  options     PollOption[]
+  votes       Vote[]
+}
+
+model PollOption {
+  id     String @id @default(cuid())
+  pollId String
+  poll   Poll   @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  label  String
+  votes  Vote[]
+}
+
+model Vote {
+  id        String     @id @default(cuid())
+  pollId    String
+  poll      Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  optionId  String
+  option    PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  unitId    String
+  unit      Unit       @relation(fields: [unitId], references: [id])
+  userId    String
+  user      User       @relation(fields: [userId], references: [id])
+  weight    Decimal    @db.Decimal(10, 2)
+  createdAt DateTime   @default(now())
+
+  @@unique([pollId, unitId])
+}
+
+/* ---------------- Vendors and contracts ---------------- */
+
+model Vendor {
+  id              String    @id @default(cuid())
+  name            String
+  service         String
+  contact         String?
+  phone           String?
+  email           String?
+  monthlyValue    Decimal   @default(0) @db.Decimal(12, 2)
+  contractStart   DateTime?
+  contractEnd     DateTime?
+  insuranceExpiry DateTime?
+  rating          Decimal?  @db.Decimal(3, 1)
+  notes           String?
+  active          Boolean   @default(true)
+}
+
+/* ---------------- Preventive maintenance ---------------- */
+
+model PMTask {
+  id            String    @id @default(cuid())
+  asset         String // e.g. Fire pump, Elevator 1-4, Genset
+  task          String
+  frequencyDays Int
+  lastDone      DateTime?
+  nextDue       DateTime
+  assignee      String?
+  vendor        String?
+  compliance    Boolean   @default(false) // required by BFP/DOLE/LGU
+  lastWorkOrder Int?
 }

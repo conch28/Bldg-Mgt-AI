@@ -241,3 +241,34 @@ export async function draftReminder(tone: string, a: { code: string; owner: stri
 }
 
 export { currentPeriod };
+
+/* ------------------------------------------------------------------ */
+/* Resident announcements (routine updates)                            */
+/* ------------------------------------------------------------------ */
+import { z } from "zod/v4";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+
+const AnnouncementDraft = z.object({
+  title: z.string().describe("Short subject line, under 70 characters"),
+  bodyEn: z.string().describe("Full message in clear English, 60-180 words, short paragraphs"),
+  bodyTl: z.string().describe("The same message in natural Taglish as spoken in Metro Manila, polite with 'po'"),
+  smsEn: z.string().describe("SMS version in English, under 300 characters, no links"),
+  smsTl: z.string().describe("SMS version in Taglish, under 300 characters, no links"),
+});
+export type AnnouncementDraftT = z.infer<typeof AnnouncementDraft>;
+
+export async function draftAnnouncement(input: { category: string; notes: string; audience: string }): Promise<AnnouncementDraftT & { ai: boolean }> {
+  if (!aiEnabled()) {
+    const body = `${input.notes.trim()}\n\nFor questions, message the Skyland helpdesk in the owner portal or visit the admin office (Mon-Sat, 8 AM-6 PM).`;
+    return { ai: false, title: `${input.category}`, bodyEn: body, bodyTl: body, smsEn: input.notes.slice(0, 280), smsTl: input.notes.slice(0, 280) };
+  }
+  const res = await client().messages.parse({
+    model: MODEL, max_tokens: 4000,
+    output_config: { effort: "low", format: zodOutputFormat(AnnouncementDraft) },
+    system: "You write announcements from the property manager of Skyland Tower, a 400-unit condominium in Metro Manila, to unit owners and residents. Be warm, clear and specific: what is happening, when, who is affected, what residents should do, and who to contact. Use the facts given; never invent dates, amounts or names. If a needed fact is missing, write [ADD: ...] so the manager fills it in. Amounts in ₱. Contacts: owner portal helpdesk, admin office Mon-Sat 8 AM-6 PM, guard house local 100.",
+    messages: [{ role: "user", content: `Type of update: ${input.category}\nAudience: ${input.audience}\nManager's notes:\n${input.notes}` }],
+  } as any) as any;
+  const out = res.parsed_output as AnnouncementDraftT | null;
+  if (!out) throw new Error("The AI draft could not be read. Please try again.");
+  return { ...out, ai: true };
+}
