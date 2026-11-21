@@ -6,8 +6,27 @@ import SlaTimer from "@/components/SlaTimer";
 import type { TwinData, TwinState, TwinTicket, TwinUnit, TwinZone } from "@/lib/building";
 import type { TwinScene, Paint } from "./scene";
 import { SITE, STACKS, TOWERS, towerLabel } from "@/lib/skyland";
+import { peso, fmtDate } from "@/lib/format";
 
-type Mode = "tickets" | "happy";
+type Mode = "tickets" | "happy" | "occ" | "market" | "dues";
+type Cat = { k: string; label: string; color: string };
+/** Colour-blind-safe palettes: Okabe-Ito for categories, a blue→red ramp for how late dues are. */
+const NEUTRAL = { light: "#e3e9ef", dark: "#2b3b52" };
+const LENS: Record<"occ" | "market" | "dues", { name: string; hint: string; cats: Cat[]; of: (u: TwinUnit) => string; staffOnly?: boolean }> = {
+  occ: { name: "Occupancy", hint: "Who lives in each unit: the owner, a tenant on a current lease, or nobody.", of: (u) => u.occ, cats: [
+    { k: "OWNER", label: "Owner lives here", color: "#0072B2" }, { k: "LEASED", label: "Leased", color: "#E69F00" },
+    { k: "VACANT", label: "Vacant", color: "#CC79A7" }, { k: "UNKNOWN", label: "Not recorded", color: "" },
+  ] },
+  market: { name: "Listings", hint: "Units listed for sale or for lease right now.", of: (u) => u.market, cats: [
+    { k: "SALE", label: "For sale", color: "#D55E00" }, { k: "LEASE", label: "For lease", color: "#009E73" }, { k: "NONE", label: "Not listed", color: "" },
+  ] },
+  dues: { name: "Dues", hint: "Association dues by unit. Tap a group to list the units.", of: (u) => u.dues, cats: [
+    { k: "PAID", label: "Paid up", color: "#4575b4" }, { k: "DUE", label: "Due this month, not late", color: "#91bfdb" },
+    { k: "LATE30", label: "1-30 days late", color: "#fdae61" }, { k: "LATE90", label: "31-90 days late", color: "#f46d43" }, { k: "LATE90P", label: "Over 90 days late", color: "#a50026" },
+  ] },
+};
+const isLens = (m: Mode): m is keyof typeof LENS => m in LENS;
+const MODES: { k: Mode; label: string }[] = [{ k: "tickets", label: "Repairs" }, { k: "happy", label: "Happiness" }, { k: "occ", label: "Occupancy" }, { k: "market", label: "Listings" }, { k: "dues", label: "Dues" }];
 type View = "3d" | "2d";
 
 const STATE_COLOR: Record<string, string> = { red: "#ef4444", amber: "#f59e0b", green: "#22c55e", watch: "#a78bfa" };
@@ -34,7 +53,9 @@ export default function BuildingTwin({ data, staff, compact }: { data: TwinData;
   const router = useRouter();
   const host = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<TwinScene | null>(null);
-  const [mode, setMode] = useState<Mode>("tickets");
+  const [mode, setModeRaw] = useState<Mode>("tickets");
+  const [only, setOnly] = useState<string | null>(null); // isolate one legend group
+  const setMode = (m: Mode) => { setModeRaw(m); setOnly(null); setSel(null); };
   const [view, setView] = useState<View | null>(null);
   const [sel, setSel] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -87,18 +108,28 @@ export default function BuildingTwin({ data, staff, compact }: { data: TwinData;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, data.units.length]);
 
+  const lensCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    if (isLens(mode)) for (const u of data.units) { const k = LENS[mode].of(u); m.set(k, (m.get(k) ?? 0) + 1); }
+    return m;
+  }, [data.units, mode]);
+  const neutral = dark ? NEUTRAL.dark : NEUTRAL.light;
+  const lensCat = (u: TwinUnit) => (isLens(mode) ? LENS[mode].cats.find((c) => c.k === LENS[mode].of(u)) : undefined);
   const unitColor = (u: TwinUnit) => {
+    if (isLens(mode)) { const c = lensCat(u); return !c || !c.color || (only && c.k !== only) ? neutral : c.color; }
     if (mode === "happy") return u.happy != null ? happyColor(u.happy) : dark ? "#2b3b52" : "#e8eef4";
     return u.state ? STATE_COLOR[u.state] : dark ? "#33465f" : "#eef3f8";
   };
   function repaint() {
     const s = sceneRef.current;
     if (!s) return;
-    const list: Paint[] = data.units.map((u) => ({ key: u.code, color: unitColor(u), glow: mode === "tickets" && u.state && u.state !== "green" ? u.state : mode === "happy" && u.happy != null && u.happy < 40 ? "red" : null }));
+    const list: Paint[] = data.units.map((u) => ({ key: u.code, color: unitColor(u),
+      glow: isLens(mode) ? (only && lensCat(u)?.k === only && (lensCounts.get(only) ?? 0) <= 60 ? lensCat(u)!.color : mode === "dues" && !only && u.dues === "LATE90P" ? "red" : null)
+        : mode === "tickets" && u.state && u.state !== "green" ? u.state : mode === "happy" && u.happy != null && u.happy < 40 ? "red" : null }));
     if (mode === "tickets") for (const z of data.zones) if (z.state && z.state !== "green") list.push({ key: "zone:" + z.id, color: "", glow: z.state });
     s.paint(list);
   }
-  useEffect(() => { repaint(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [data, mode, dark, view]);
+  useEffect(() => { repaint(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [data, mode, only, dark, view]);
   useEffect(() => { sceneRef.current?.setTheme(dark); }, [dark]);
   useEffect(() => { if (sel) sceneRef.current?.select(sel); else sceneRef.current?.reset(); }, [sel]);
 
@@ -124,12 +155,11 @@ export default function BuildingTwin({ data, staff, compact }: { data: TwinData;
         <div style={{ minWidth: 0 }}>
           <span className="ai-badge">Live</span>
           <h3 style={{ marginTop: 4 }}>{data.building}, live</h3>
-          <div className="hint">{mode === "tickets" ? "Units flash red until the problem is fixed. Tap any unit." : `Resident happiness by unit, last 90 days${data.happyAvg != null ? ` · average ${data.happyAvg}` : ""}`}</div>
+          <div className="hint">{isLens(mode) ? LENS[mode].hint : mode === "tickets" ? "Units flash red until the problem is fixed. Tap any unit." : `Resident happiness by unit, last 90 days${data.happyAvg != null ? ` · average ${data.happyAvg}` : ""}`}</div>
         </div>
         <div className="twin-ctrl">
-          <div className="seg2" role="tablist" aria-label="Colour by">
-            <button role="tab" aria-selected={mode === "tickets"} className={mode === "tickets" ? "on" : ""} onClick={() => setMode("tickets")}>Repairs</button>
-            <button role="tab" aria-selected={mode === "happy"} className={mode === "happy" ? "on" : ""} onClick={() => setMode("happy")}>Happiness</button>
+          <div className="seg2 lens" role="tablist" aria-label="Colour units by">
+            {MODES.map((m) => <button key={m.k} role="tab" aria-selected={mode === m.k} className={mode === m.k ? "on" : ""} onClick={() => setMode(m.k)}>{m.label}</button>)}
           </div>
           <div className="seg2" role="tablist" aria-label="View">
             <button role="tab" aria-selected={view === "3d"} className={view === "3d" ? "on" : ""} onClick={() => pickView("3d")}>3D</button>
@@ -139,7 +169,12 @@ export default function BuildingTwin({ data, staff, compact }: { data: TwinData;
       </div>
 
       <div className="twin-legend">
-        {mode === "tickets" ? (["red", "amber", "green", "watch"] as const).map((k) => (
+        {isLens(mode) ? LENS[mode].cats.map((c) => (
+          <button key={c.k} className={"lg-btn" + (only === c.k ? " on" : "") + (only && only !== c.k ? " off" : "")} aria-pressed={only === c.k}
+            onClick={() => { setOnly(only === c.k ? null : c.k); setSel(null); }} title={only === c.k ? "Show all" : `Show only: ${c.label}`}>
+            <i className="lg" style={{ background: c.color || neutral, outline: c.color ? undefined : "1px solid var(--line)" }} />{c.label} <b className="num">{lensCounts.get(c.k) ?? 0}</b>
+          </button>
+        )) : mode === "tickets" ? (["red", "amber", "green", "watch"] as const).map((k) => (
           <span key={k}><i className={"lg " + k} style={{ background: STATE_COLOR[k] }} />{STATE_WORD[k]} <b className="num">{data.counts[k]}</b></span>
         )) : (
           <span className="happy-scale"><i style={{ background: happyColor(10) }} />Unhappy<i style={{ background: happyColor(55) }} />Mixed<i style={{ background: happyColor(90) }} />Happy<i style={{ background: dark ? "#2b3b52" : "#d3dce6" }} />No rating yet</span>
@@ -165,6 +200,8 @@ export default function BuildingTwin({ data, staff, compact }: { data: TwinData;
         <aside className="twin-panel" aria-live="polite">
           {selected ? (
             "code" in selected ? <UnitPanel u={selected} staff={staff} onClose={() => setSel(null)} /> : <ZonePanel z={selected} onClose={() => setSel(null)} />
+          ) : isLens(mode) ? (
+            <LensList lens={mode} units={data.units} only={only} counts={lensCounts} onOnly={setOnly} onPick={setSel} staff={staff} />
           ) : mode === "tickets" ? (
             <>
               <h4>Needs attention <span className="hint">({attention.length})</span></h4>
@@ -200,6 +237,51 @@ export default function BuildingTwin({ data, staff, compact }: { data: TwinData;
   );
 }
 
+/** The list beside the model for the occupancy, listings and dues views (also the accessible fallback). */
+function LensList({ lens, units, only, counts, onOnly, onPick, staff }: { lens: keyof typeof LENS; units: TwinUnit[]; only: string | null; counts: Map<string, number>; onOnly: (k: string | null) => void; onPick: (k: string) => void; staff: boolean }) {
+  const L = LENS[lens];
+  const total = units.length;
+  if (!only) return (
+    <>
+      <h4>{L.name} <span className="hint">({total} units)</span></h4>
+      <div className="twin-list">
+        {L.cats.map((c) => {
+          const n = counts.get(c.k) ?? 0;
+          return (
+            <button key={c.k} className="twin-item" onClick={() => onOnly(c.k)} disabled={!n}>
+              <i className="dotp" style={{ background: c.color || "var(--line)" }} />
+              <span style={{ minWidth: 0, flex: 1 }}><b>{c.label}</b><span className="hint ell">{n} unit{n === 1 ? "" : "s"} · {Math.round((n / total) * 100)}%</span></span>
+              <span className="lens-bar" aria-hidden="true"><i style={{ width: `${(n / total) * 100}%`, background: c.color || "var(--line)" }} /></span>
+            </button>
+          );
+        })}
+      </div>
+      {lens === "dues" && staff && <Link href="/collections" className="btn sm" style={{ marginTop: 8 }}>Open collections</Link>}
+    </>
+  );
+  const cat = L.cats.find((c) => c.k === only)!;
+  const rows = units.filter((u) => L.of(u) === only).sort((a, b) => lens === "dues" ? b.daysLate - a.daysLate || b.balance - a.balance : lens === "market" ? (b.price ?? 0) - (a.price ?? 0) : a.code.localeCompare(b.code, "en", { numeric: true }));
+  const sub = (u: TwinUnit) => lens === "dues" ? (u.dues === "PAID" ? "Paid up" : `${peso(u.balance)}${u.daysLate ? ` · ${u.daysLate} days late` : " due this month"}`)
+    : lens === "market" ? (u.price ? `${peso(u.price)}${u.market === "LEASE" ? "/mo" : ""} · ${u.sqm} sqm` : `${u.sqm} sqm`)
+      : u.occ === "LEASED" && u.leaseEnd ? `Lease ends ${fmtDate(new Date(u.leaseEnd))}` : `${u.sqm} sqm · ${u.owner ?? "owner not registered"}`;
+  return (
+    <>
+      <div className="twin-ph">
+        <h4><i className="dotp" style={{ background: cat.color || "var(--line)", marginRight: 6 }} />{cat.label} <span className="hint">({rows.length})</span></h4>
+        <button className="btn sm" onClick={() => onOnly(null)}>Show all</button>
+      </div>
+      <div className="twin-list">
+        {rows.slice(0, 40).map((u) => (
+          <button key={u.code} className="twin-item" onClick={() => onPick(u.code)}>
+            <span style={{ minWidth: 0 }}><b>Unit {u.code}</b><span className="hint ell">{sub(u)}</span></span>
+          </button>
+        ))}
+        {rows.length > 40 && <div className="hint" style={{ padding: "4px 8px" }}>+{rows.length - 40} more</div>}
+      </div>
+    </>
+  );
+}
+
 const titleCase = (s: string) => s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 
 function TicketRow({ t }: { t: TwinTicket }) {
@@ -230,6 +312,12 @@ function UnitPanel({ u, staff, onClose }: { u: TwinUnit; staff: boolean; onClose
         <div><span className="hint">Owner</span><b>{u.owner ?? "Not registered yet"}</b></div>
         {u.tenant && <div><span className="hint">Tenant</span><b>{u.tenant}</b></div>}
         {u.happy != null && <div><span className="hint">Happiness</span><b style={{ color: happyColor(u.happy) }}>{u.happy}/100</b><span className="hint"> · {u.happyN} rating{u.happyN === 1 ? "" : "s"}</span></div>}
+      </div>
+      <div className="twin-people">
+        <div><span className="hint">Lives here</span><b>{u.occ === "LEASED" ? `Tenant${u.leaseEnd ? `, lease until ${fmtDate(new Date(u.leaseEnd))}` : ""}` : u.occ === "OWNER" ? "Owner" : u.occ === "VACANT" ? "Nobody (vacant)" : "Not recorded"}</b></div>
+        {u.market !== "NONE" && <div><span className="hint">Listed</span><b>For {u.market === "SALE" ? "sale" : "lease"}{u.price ? ` · ${peso(u.price)}${u.market === "LEASE" ? "/mo" : ""}` : ""}</b></div>}
+        <div><span className="hint">Dues</span><b style={{ color: u.dues.startsWith("LATE") ? "#d55e00" : undefined }}>{u.dues === "PAID" ? "Paid up" : u.dues === "DUE" ? `${peso(u.balance)} due this month` : `${peso(u.balance)} unpaid · ${u.daysLate} days late`}</b></div>
+        <div><span className="hint">Size</span><b>{u.sqm} sqm</b></div>
       </div>
       {u.lastComment && <div className="twin-quote">&ldquo;{u.lastComment}&rdquo;</div>}
       {u.sos && <div className="twin-warn bad"><b>SOS: {u.sos.kind.toLowerCase()}</b> · {ago(Date.now() - u.sos.at)}. <Link href="/sos">Respond</Link></div>}

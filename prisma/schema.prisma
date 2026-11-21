@@ -94,6 +94,7 @@ model Unit {
   ownerId         String?
   owner           User?            @relation("UnitOwner", fields: [ownerId], references: [id])
   ownerName       String? // for units whose owner has no login yet
+  occupancy       String? // OWNER (owner lives here) | VACANT | null = not recorded; "leased" comes from a current Lease
   bills           Bill[]
   workOrders      WorkOrder[]
   bookings        Booking[]

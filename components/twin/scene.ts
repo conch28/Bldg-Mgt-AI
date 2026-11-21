@@ -8,7 +8,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { SITE, TOWERS, parseUnit } from "@/lib/skyland";
 
-export type Paint = { key: string; color: string; glow?: "red" | "amber" | "watch" | null };
+export type Paint = { key: string; color: string; glow?: "red" | "amber" | "watch" | string | null }; // a named state or a CSS colour
 export type SceneUnit = { key: string };
 export type TwinScene = {
   paint: (p: Paint[]) => void;
@@ -220,7 +220,7 @@ export function createTwinScene(opts: {
       const parts = zone ? zoneParts(p.key.slice(5)).map(boxOf) : [boundsOf(p.key)].filter((b): b is NonNullable<typeof b> => !!b);
       for (const b of parts) {
       // unit alerts show through the building (x-ray) so nothing hides on the far side; big zones stay subtle
-      const mat = new THREE.MeshBasicMaterial({ color: GLOW[p.glow], transparent: true, opacity: 0.5, depthWrite: false, depthTest: zone || p.glow !== "red", blending: THREE.AdditiveBlending });
+      const mat = new THREE.MeshBasicMaterial({ color: GLOW[p.glow] ?? p.glow, transparent: true, opacity: 0.5, depthWrite: false, depthTest: zone || p.glow === "amber" || p.glow === "watch", blending: THREE.AdditiveBlending });
       const g = new THREE.Mesh(box, mat);
       g.position.copy(b.c);
       g.scale.copy(b.s).addScalar(0.18);

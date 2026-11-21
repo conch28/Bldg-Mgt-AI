@@ -500,7 +500,8 @@ html,body{margin:0}
 /* ---------- Live building (3D twin) ---------- */
 .twin{padding:16px;display:flex;flex-direction:column;gap:10px}
 .twin-head{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
-.twin-ctrl{display:flex;gap:8px;flex-wrap:wrap}
+.twin-ctrl{display:flex;gap:8px;flex-wrap:wrap;min-width:0;max-width:100%}
+.twin{min-width:0;overflow:hidden}
 .seg2{display:inline-flex;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:3px}
 .seg2 button{border:0;background:none;padding:5px 12px;border-radius:8px;font-weight:600;font-size:12.5px;color:var(--muted)}
 .seg2 button.on{background:var(--panel);color:var(--fg);box-shadow:0 1px 3px rgba(0,0,0,.12)}
@@ -508,6 +509,15 @@ html,body{margin:0}
 .twin-legend span{display:inline-flex;align-items:center;gap:6px}
 .twin-legend b{color:var(--fg)}
 .twin-legend .lg{width:10px;height:10px;border-radius:3px;display:inline-block}
+.seg2.lens{max-width:100%;overflow-x:auto;scrollbar-width:none}
+.seg2.lens::-webkit-scrollbar{display:none}
+.seg2 button{white-space:nowrap}
+.lg-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid transparent;background:none;border-radius:999px;padding:3px 8px 3px 6px;font:inherit;color:var(--muted);cursor:pointer}
+.lg-btn:hover{border-color:var(--line)}
+.lg-btn.on{border-color:var(--fg);color:var(--fg);background:var(--panel-2)}
+.lg-btn.off{opacity:.45}
+.lens-bar{width:56px;height:6px;border-radius:3px;background:var(--panel-2);overflow:hidden;flex:none}
+.lens-bar i{display:block;height:100%}
 .twin-legend .lg.red{animation:twinPulse 1.4s ease-in-out infinite}
 .happy-scale i{width:14px;height:10px;border-radius:3px;display:inline-block;margin-left:6px}
 .happy-scale i:first-child{margin-left:0}

@@ -17,7 +17,12 @@ export type TwinUnit = {
   code: string; floor: number; tower: string; stack: string; penthouse: boolean; state: TwinState;
   tickets: TwinTicket[]; owner: string | null; tenant: string | null; phone: string | null;
   happy: number | null; happyN: number; lastComment: string | null; sos: { kind: string; at: number } | null; watch: string | null;
+  sqm: number; occ: Occupancy; leaseEnd: number | null; market: Market; price: number | null;
+  dues: DuesBucket; balance: number; daysLate: number;
 };
+export type Occupancy = "OWNER" | "LEASED" | "VACANT" | "UNKNOWN";
+export type Market = "SALE" | "LEASE" | "NONE";
+export type DuesBucket = "PAID" | "DUE" | "LATE30" | "LATE90" | "LATE90P";
 export type TwinZone = { id: "lobby" | "parking" | "amenity" | "core"; label: string; state: TwinState; tickets: TwinTicket[]; locations: string[]; watch: string | null };
 export type TwinData = {
   building: string; units: TwinUnit[]; zones: TwinZone[];
@@ -45,16 +50,32 @@ export async function buildingTwin(role: Role): Promise<TwinData> {
   const now = nowManila().getTime();
   const [building, units, wos, pulses, sos, leases, warnings] = await Promise.all([
     prisma.building.findFirst({ select: { name: true } }),
-    prisma.unit.findMany({ select: { code: true, floor: true, ownerName: true, owner: { select: { name: true, phone: true } } } }),
+    prisma.unit.findMany({ select: { id: true, code: true, floor: true, sqm: true, occupancy: true, ownerName: true, owner: { select: { name: true, phone: true } } } }),
     prisma.workOrder.findMany({
       where: { OR: [{ status: { not: "DONE" } }, { closedAt: { gte: new Date(now - RECENT_MS) } }] },
       orderBy: { createdAt: "desc" }, take: 400,
     }),
     prisma.pulse.findMany({ where: { createdAt: { gte: new Date(now - 90 * 86400000) }, unitCode: { not: null } }, select: { unitCode: true, score: true, comment: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
     prisma.sosAlert.findMany({ where: { status: { not: "RESOLVED" } }, select: { unitCode: true, kind: true, createdAt: true } }),
-    prisma.lease.findMany({ where: { end: { gte: new Date(now) }, start: { lte: new Date(now) } }, select: { tenantName: true, unit: { select: { code: true } } } }),
+    prisma.lease.findMany({ where: { end: { gte: new Date(now) }, start: { lte: new Date(now) } }, select: { tenantName: true, end: true, unit: { select: { code: true } } } }),
     earlyWarnings(),
   ]);
+  const [listings, unpaid] = await Promise.all([
+    prisma.listing.findMany({ where: { status: "LIVE" }, select: { unitId: true, kind: true, price: true } }),
+    prisma.bill.findMany({ where: { status: { not: "PAID" } }, select: { unitId: true, amount: true, paid: true, dueDate: true } }),
+  ]);
+  const listBy = new Map<string, { kind: string; price: number }>();
+  for (const l of listings) { const cur = listBy.get(l.unitId); if (!cur || l.kind === "SALE") listBy.set(l.unitId, { kind: l.kind, price: Number(l.price) }); }
+  const owe = new Map<string, { balance: number; oldestLate: number | null; dueNow: boolean }>();
+  for (const b of unpaid) {
+    const e = owe.get(b.unitId) ?? { balance: 0, oldestLate: null, dueNow: false };
+    const left = Number(b.amount) - Number(b.paid);
+    if (left <= 0) continue;
+    e.balance += left;
+    const due = b.dueDate.getTime();
+    if (due < now) e.oldestLate = Math.min(e.oldestLate ?? due, due); else e.dueNow = true;
+    owe.set(b.unitId, e);
+  }
   const staff = role === "MANAGER" || role === "ADMIN";
   const toTicket = (w: (typeof wos)[number]): TwinTicket => ({
     n: w.number, title: w.title, status: w.status, priority: w.priority, category: w.category, source: w.source,
@@ -67,12 +88,15 @@ export async function buildingTwin(role: Role): Promise<TwinData> {
   for (const p of pulses) { const e = happy.get(p.unitCode!) ?? { sum: 0, n: 0, last: null }; e.sum += toScore(p.score); e.n++; if (p.comment) e.last = p.comment; happy.set(p.unitCode!, e); }
   const sosBy = new Map(sos.filter((s) => s.unitCode).map((s) => [s.unitCode!, { kind: s.kind, at: s.createdAt.getTime() }]));
   const tenantBy = new Map(leases.map((l) => [l.unit.code, l.tenantName]));
+  const leaseEndBy = new Map(leases.map((l) => [l.unit.code, l.end.getTime()]));
   const watchBy = new Map<string, string>();
   for (const w of warnings) for (const c of w.units) if (!watchBy.has(c)) watchBy.set(c, w.title);
 
   const codes = new Set(units.map((u) => u.code.toUpperCase()));
   const twinUnits: TwinUnit[] = units.map((u) => {
     const p = parseUnit(u.code);
+    const o = owe.get(u.id);
+    const lateDays = o?.oldestLate != null ? Math.floor((now - o.oldestLate) / 86400000) : 0;
     const tickets = byLoc.get(u.code.toUpperCase()) ?? [];
     const h = happy.get(u.code);
     const s = sosBy.get(u.code) ?? null;
@@ -83,6 +107,12 @@ export async function buildingTwin(role: Role): Promise<TwinData> {
       code: u.code, floor: u.floor, tower: p?.tower ?? "?", stack: p?.stack ?? "", penthouse: !!p?.penthouse, state, tickets,
       owner: u.owner?.name ?? u.ownerName ?? null, tenant: tenantBy.get(u.code) ?? null, phone: staff ? u.owner?.phone ?? null : null,
       happy: h ? Math.round(h.sum / h.n) : null, happyN: h?.n ?? 0, lastComment: staff ? h?.last ?? null : null, sos: s, watch,
+      sqm: Number(u.sqm),
+      occ: tenantBy.has(u.code) ? "LEASED" : u.occupancy === "OWNER" ? "OWNER" : u.occupancy === "VACANT" ? "VACANT" : "UNKNOWN",
+      leaseEnd: leaseEndBy.get(u.code) ?? null,
+      market: (listBy.get(u.id)?.kind as Market | undefined) ?? "NONE", price: listBy.get(u.id)?.price ?? null,
+      dues: !o ? "PAID" : o.oldestLate == null ? "DUE" : lateDays <= 30 ? "LATE30" : lateDays <= 90 ? "LATE90" : "LATE90P",
+      balance: o?.balance ?? 0, daysLate: lateDays,
     };
   });
 
