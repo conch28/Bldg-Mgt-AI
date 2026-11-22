@@ -55,6 +55,7 @@ const ALL: Item[] = [
   { href: "/procurement", label: "Procurement & controls", group: "Board", icon: "cart", roles: B },
   { href: "/scorecard", label: "Manager scorecard", group: "Board", icon: "medal", roles: B },
   { href: "/duties", label: "Accountability", group: "Board", icon: "shield", roles: B },
+  { href: "/data", label: "Data Center", group: "Board", icon: "layers", roles: B },
   { href: "/listings", label: "Units for sale & lease", group: "Board", icon: "key", roles: B },
   { href: "/meetings", label: "Board meetings & AGM", group: "Board", icon: "cal", roles: B },
   { href: "/polls", label: "Voting & proxies", group: "Board", icon: "vote", roles: B },
@@ -92,8 +93,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     u.role === "OWNER" ? prisma.inquiry.count({ where: { listing: { userId: u.id }, status: "NEW" } }) : 0,
   ]);
   const toSign = u.role === "BOARD" || isMgr ? await prisma.purchaseRequest.count({ where: { status: "PENDING", requestedBy: { not: u.id } } }) : u.role === "GUARD" ? await prisma.purchaseRequest.count({ where: { status: "ORDERED" } }) : 0;
+  const dataP0 = ["BOARD", "MANAGER", "ADMIN"].includes(u.role) ? await prisma.dataIssue.count({ where: { buildingId: u.buildingId, status: "OPEN", severity: "P0" } }) : 0;
   const overdue = u.role === "OWNER" ? 0 : tasksFor(await allTasks().catch(() => []), u.role).filter((t) => t.level >= 1).length;
-  const counts: Record<string, number> = { "/tasks": overdue, "/comms": pending, "/work-orders": escalated, "/updates": unread, "/today": pending + escalated + risk, "/happiness": risk, "/sos": sos, "/property": inquiries, "/procurement": toSign };
+  const counts: Record<string, number> = { "/tasks": overdue, "/comms": pending, "/work-orders": escalated, "/updates": unread, "/today": pending + escalated + risk, "/happiness": risk, "/sos": sos, "/property": inquiries, "/procurement": toSign, "/data": dataP0 };
   const items = ALL.filter((i) => i.roles.includes(u.role)).map(({ roles, ...i }) => ({ ...i, count: counts[i.href] || 0 }));
   items.push({ href: `${homeFor(u.role)}?tour=1`, label: "App tour", group: "Help", icon: "spark", count: 0 });
   const tabs = (TABS[u.role] ?? []).map((t) => ({ ...t, count: counts[t.href] || 0 }));

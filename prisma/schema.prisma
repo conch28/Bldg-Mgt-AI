@@ -470,6 +470,9 @@ model PMTask {
   vendor        String?
   compliance    Boolean   @default(false) // required by BFP/DOLE/LGU
   lastWorkOrder Int?
+  assetTag      String? // registry asset this schedule covers
+  /// Where the interval comes from. Safety-critical schedules must not stay UNVERIFIED.
+  intervalSource String   @default("UNVERIFIED") // MANUFACTURER | STATUTORY | ENGINEER | CONTRACT | UNVERIFIED
 }
 
 /// Resident pulse: a 1-5 rating with an optional comment, after a repair (TICKET) or once a month (MONTHLY).
@@ -883,6 +886,17 @@ model Asset {
   cost          Decimal         @db.Decimal(12, 2)
   vendor        String?
   status        String          @default("OK") // OK | FAULTY | RETIRED
+  // Registry fields (data readiness). Specs count as verified only when a person checked them against a source.
+  manufacturer    String?
+  model           String?
+  serial          String?
+  criticality     String    @default("NORMAL") // SAFETY | HIGH | NORMAL
+  replacementCost Decimal?  @db.Decimal(12, 2)
+  ownerName       String? // responsible person, e.g. chief engineer
+  specSource      String? // NAMEPLATE | MANUAL | INVOICE | CONTRACTOR | UNKNOWN
+  verifiedBy      String?
+  verifiedAt      DateTime?
+  manualDocId     String? // Document holding the manual or datasheet
   replacements  Replacement[]
   sensors       SensorReading[]
   createdAt     DateTime        @default(now())
@@ -1013,4 +1027,92 @@ model DutyNudge {
   sentAt DateTime @default(now())
 
   @@unique([key, level])
+}
+
+/**
+ * ---------------- Data readiness (Building Data Management Center) ----------------
+ * New tables carry buildingId so a second building can be added without a data migration.
+ */
+
+/// Permits, certificates, insurance and other documents the building must keep valid.
+model ComplianceItem {
+  id           String    @id @default(cuid())
+  buildingId   String
+  kind         String // PERMIT | CERTIFICATE | INSURANCE | PLAN | PRIVACY | OTHER
+  title        String
+  authority    String // issuing body, e.g. BFP, Office of the Building Official
+  docNumber    String?
+  issuedAt     DateTime?
+  expiresAt    DateTime?
+  renewal      String? // what renewal needs, in plain words
+  ownerName    String? // responsible person
+  mandatory    Boolean   @default(true)
+  /// The default PH checklist is a starting point. A qualified person confirms each rule applies before it counts as mandatory.
+  ruleConfirmedBy String?
+  ruleConfirmedAt DateTime?
+  documentId   String? // supporting file in Documents
+  status       String    @default("PENDING") // PENDING (entered, not checked) | VERIFIED | REJECTED
+  verifiedBy   String?
+  verifiedAt   DateTime?
+  enteredBy    String
+  note         String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([buildingId, expiresAt])
+}
+
+/// A contractor's registration, permit, licence, insurance or reference, checked by someone other than who entered it.
+model VendorCredential {
+  id         String    @id @default(cuid())
+  vendorId   String
+  kind       String // SEC_DTI | MAYORS_PERMIT | BIR_2303 | PCAB | INSURANCE | SAFETY | TECH_LICENSE | REFERENCE
+  number     String?
+  issuer     String?
+  expiresAt  DateTime?
+  documentId String?
+  status     String    @default("PENDING") // PENDING | VERIFIED | REJECTED
+  enteredBy  String
+  verifiedBy String?
+  verifiedAt DateTime?
+  note       String?
+  createdAt  DateTime  @default(now())
+
+  @@index([vendorId])
+}
+
+/// One problem found by the daily data checks. Resolving needs evidence; checks reopen it if the problem comes back.
+model DataIssue {
+  id         String    @id @default(cuid())
+  buildingId String
+  checkId    String // e.g. asset-no-pm
+  entityKey  String // e.g. asset:EL-GEN-1
+  severity   String // P0 | P1 | P2 | P3
+  title      String
+  detail     String
+  ownerRole  String // who must fix it
+  href       String? // where to fix it
+  status     String    @default("OPEN") // OPEN | RESOLVED
+  firstSeen  DateTime  @default(now())
+  lastSeen   DateTime  @default(now())
+  notifiedAt DateTime?
+  resolvedAt DateTime?
+  resolvedBy String?
+  evidence   String?
+
+  @@unique([buildingId, checkId, entityKey])
+  @@index([buildingId, status, severity])
+}
+
+/// The client's sign-off on a readiness register row: owner confirmed and data approved for operational use.
+model ReadinessSignoff {
+  id         String   @id @default(cuid())
+  buildingId String
+  reqId      String
+  ownerName  String
+  approvedBy String
+  approvedAt DateTime @default(now())
+  note       String?
+
+  @@unique([buildingId, reqId])
 }

@@ -6,7 +6,7 @@ type Ctx = { prisma: PrismaClient; rnd: () => number; hash: string; buildingId: 
 const DAY = 86400000;
 
 /** Minimal one-page PDF with text lines (Helvetica). Enough for a demo document vault. */
-function pdf(title: string, lines: string[]) {
+export function pdf(title: string, lines: string[]) {
   const esc = (s: string) => s.replace(/[\\()]/g, (c) => "\\" + c).replace(/[^\x20-\x7E]/g, "-");
   const body = [`BT /F1 18 Tf 56 780 Td (${esc(title)}) Tj ET`, ...lines.map((l, i) => `BT /F1 11 Tf 56 ${748 - i * 18} Td (${esc(l)}) Tj ET`)].join("\n");
   const objs = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
