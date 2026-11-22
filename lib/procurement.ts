@@ -78,7 +78,7 @@ export async function controlFlags(): Promise<Flag[]> {
 
   // 1. Price above the benchmark for that item.
   for (const pr of prs) {
-    if (!pr.item || !pr.chosenQuote || !["APPROVED", "ORDERED", "RECEIVED", "PENDING"].includes(pr.status)) continue;
+    if (!pr.item || !pr.chosenQuote || !["APPROVED", "ORDERED", "RECEIVED", "PAID", "PENDING"].includes(pr.status)) continue;
     const q = pr.quotes.find((x) => x.id === pr.chosenQuote); if (!q) continue;
     const unit = Number(q.total) / Math.max(1, pr.qty), bench = Number(pr.item.benchmark);
     if (unit > bench * (1 + LIMITS.overBenchmark)) out.push({
@@ -197,7 +197,7 @@ export async function savingsThisYear() {
   const y = nowManila().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" }).slice(0, 4);
   const since = new Date(`${y}-01-01T00:00:00+08:00`);
   const [prs, claims] = await Promise.all([
-    prisma.purchaseRequest.findMany({ where: { createdAt: { gte: since }, status: { in: ["APPROVED", "ORDERED", "RECEIVED"] } }, include: { quotes: true } }),
+    prisma.purchaseRequest.findMany({ where: { createdAt: { gte: since }, status: { in: ["APPROVED", "ORDERED", "RECEIVED", "PAID"] } }, include: { quotes: true } }),
     prisma.replacement.findMany({ where: { doneAt: { gte: since }, warrantyClaim: true }, include: { asset: true, item: true } }),
   ]);
   let quotes = 0;

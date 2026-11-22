@@ -136,6 +136,15 @@ model WorkOrder {
   roundId     String? // set when a guard logged it during a round
   round       GuardRound? @relation(fields: [roundId], references: [id])
   events      WOEvent[]
+  // Accountability: who acknowledged, who did the work (with photo proof) and who checked it.
+  ackAt       DateTime? // first response by the manager or front desk
+  ackBy       String?
+  doneBy      String? // technician or vendor who did the work
+  doneNote    String?
+  donePhoto   String? // compressed JPEG data URL of the finished work (required to close)
+  verifiedAt  DateTime? // manager confirmed the fix (within 24h of completion)
+  verifiedBy  String?
+  jobToken    String?     @unique // one-tap job link for technicians and vendors without an account
 
   @@index([status])
 }
@@ -940,7 +949,7 @@ model PurchaseRequest {
   qty          Int        @default(1)
   reason       String
   workOrder    Int?
-  status       String     @default("QUOTING") // QUOTING | PENDING | APPROVED | ORDERED | RECEIVED | REJECTED
+  status       String     @default("QUOTING") // QUOTING | PENDING | APPROVED | ORDERED | RECEIVED | PAID | REJECTED
   requestedBy  String // user id
   requester    String // display name
   approvals    Json       @default("[]") // [{ id, name, role, at }]
@@ -955,6 +964,11 @@ model PurchaseRequest {
   receivedNote String?
   receivedPic  String?
   invoiceTotal Decimal?   @db.Decimal(12, 2)
+  submittedAt  DateTime? // sent for approval; approvers have 48h
+  receiptPic   String? // photo of the official receipt / sales invoice (no receipt, no payment)
+  paidAt       DateTime?
+  paidBy       String?
+  paidRef      String? // check number or bank reference
   quotes       Quote[]
   createdAt    DateTime   @default(now())
 
@@ -985,4 +999,18 @@ model SensorReading {
   at      DateTime @default(now())
 
   @@index([assetId, metric, at])
+}
+
+/**
+ * Data-entry accountability: one row per reminder or escalation sent for an overdue record,
+ * so the daily run never nags the same person twice for the same step.
+ */
+model DutyNudge {
+  id     String   @id @default(cuid())
+  key    String // task key, e.g. wo-ack:123
+  level  Int // 1 reminder to the doer, 2 their supervisor, 3 the board
+  sentTo String
+  sentAt DateTime @default(now())
+
+  @@unique([key, level])
 }

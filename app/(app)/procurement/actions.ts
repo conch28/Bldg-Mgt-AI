@@ -50,7 +50,7 @@ export async function createRequest(fd: FormData) {
 
   const pr = await prisma.purchaseRequest.create({ data: {
     title: p.data.title, category: p.data.category, reason: p.data.reason, qty: p.data.qty, itemId: item?.id ?? null, workOrder: wo,
-    requestedBy: u.id, requester: u.name, status: enough ? "PENDING" : "QUOTING", chooseNote: chosenIdx !== lowest ? p.data.chooseNote : null,
+    requestedBy: u.id, requester: u.name, status: enough ? "PENDING" : "QUOTING", submittedAt: enough ? nowManila() : null, chooseNote: chosenIdx !== lowest ? p.data.chooseNote : null,
     quotes: { create: quotes.map((q) => ({ vendor: q.vendor, total: q.total, addedBy: u.name })) },
   }, include: { quotes: true } });
   const chosen = pr.quotes.find((q) => q.vendor === quotes[chosenIdx].vendor && Number(q.total) === quotes[chosenIdx].total);
@@ -86,7 +86,7 @@ export async function submitForApproval(fd: FormData) {
   if (Number(chosen.total) > lowest && !note) return err(n, "You picked a quote that isn't the cheapest. Say why.");
   const rule = ruleFor(Number(chosen.total));
   if (pr.quotes.length < rule.quotes) return err(n, `This amount needs ${rule.quotes} quotes from different vendors (${pr.quotes.length} so far).`);
-  await prisma.purchaseRequest.update({ where: { id: pr.id }, data: { status: "PENDING", chosenQuote: chosen.id, chooseNote: Number(chosen.total) > lowest ? note : null } });
+  await prisma.purchaseRequest.update({ where: { id: pr.id }, data: { status: "PENDING", submittedAt: nowManila(), chosenQuote: chosen.id, chooseNote: Number(chosen.total) > lowest ? note : null } });
   await audit(u.id, "purchase request", `PR-${n} sent for approval, ${chosen.vendor} ${peso(Number(chosen.total))}`);
   await nudgeApprovers(n, pr.title, Number(chosen.total));
   revalidatePath("/procurement");
@@ -158,4 +158,47 @@ export async function receive(fd: FormData) {
   if (short) await notifyUser(pr.requestedBy, `Short delivery on ${pr.poNumber}`, `${qty.data} of ${pr.qty} arrived. Don't pay the full invoice until the rest comes.`, ["APP"]);
   revalidatePath("/procurement"); revalidatePath("/inventory");
   go(`pr=${n}&ok=` + encodeURIComponent(short ? `Received ${qty.data} of ${pr.qty}. The requester has been told it's short.` : "Received and added to stock."));
+}
+
+/** Step 1 of paying: the official receipt or sales invoice, within 24 hours of delivery. */
+export async function saveReceipt(fd: FormData) {
+  const u = await requireRole("MANAGER", "ADMIN");
+  const n = prNo(fd); const pr = await load(n);
+  if (pr.status !== "RECEIVED") return err(n, "Receipts are added after the delivery is received.");
+  const photo = String(fd.get("receipt") || "");
+  const total = money.safeParse(String(fd.get("invoice") || "").replace(/[,₱\s]/g, ""));
+  if (!photo) return err(n, "Take a photo of the official receipt or sales invoice.");
+  if (!photoOk(photo)) return err(n, "That photo couldn't be used. Try again.");
+  if (!total.success) return err(n, "Enter the amount on the receipt.");
+  await prisma.purchaseRequest.update({ where: { id: pr.id }, data: { receiptPic: photo, invoiceTotal: total.data } });
+  await audit(u.id, "receipt", `${pr.poNumber ?? `PR-${n}`}: official receipt ${peso(total.data)} uploaded by ${u.name}`);
+  revalidatePath("/procurement"); revalidatePath("/tasks");
+  go(`pr=${n}&ok=` + encodeURIComponent("Receipt saved. Someone other than the requester can now release the payment."));
+}
+
+/**
+ * Step 2: release the payment. Money gates: no receipt, no payment; never above the PO (or above what arrived);
+ * the requester can't pay their own request; a linked repair must be finished and verified first.
+ */
+export async function releasePayment(fd: FormData) {
+  const u = await requireRole("MANAGER", "ADMIN");
+  const n = prNo(fd); const pr = await load(n);
+  if (pr.status !== "RECEIVED") return err(n, "Only received deliveries can be paid.");
+  if (!pr.receiptPic || !pr.invoiceTotal) return err(n, "No receipt, no payment. Upload the official receipt first.");
+  if (pr.requestedBy === u.id) return err(n, "You raised this request, so someone else has to release the payment.");
+  const q = pr.quotes.find((x) => x.id === pr.chosenQuote);
+  const po = Number(q?.total ?? 0), got = pr.receivedQty ?? pr.qty;
+  const cap = Math.round(po * (pr.qty ? Math.min(1, got / pr.qty) : 1) * 100) / 100;
+  const invoice = Number(pr.invoiceTotal);
+  if (invoice > cap * 1.02) return err(n, `The receipt (${peso(invoice)}) is above what can be paid (${peso(cap)}${got < pr.qty ? ` for ${got} of ${pr.qty} delivered` : ", the PO amount"}). Get a corrected receipt.`);
+  if (pr.workOrder) {
+    const wo = await prisma.workOrder.findUnique({ where: { number: pr.workOrder } });
+    if (wo && (wo.status !== "DONE" || !wo.verifiedAt)) return err(n, `WO-${wo.number} must be finished and verified before the vendor is paid.`);
+  }
+  const ref = String(fd.get("ref") || "").trim().slice(0, 80);
+  if (!ref) return err(n, "Enter the check number or bank reference.");
+  await prisma.purchaseRequest.update({ where: { id: pr.id }, data: { status: "PAID", paidAt: nowManila(), paidBy: u.name, paidRef: ref } });
+  await audit(u.id, "payment", `${pr.poNumber ?? `PR-${n}`} paid ${peso(invoice)} to ${q?.vendor ?? "vendor"} by ${u.name}, ref ${ref}`);
+  revalidatePath("/procurement"); revalidatePath("/tasks");
+  go(`pr=${n}&ok=` + encodeURIComponent(`Payment of ${peso(invoice)} recorded.`));
 }
