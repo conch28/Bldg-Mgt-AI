@@ -11,6 +11,8 @@ AI-first building management for Philippine condominiums. This first version run
 | **Property manager** | Work orders (status, assignee, live SLA timers, every change logged) · Collections (overdue accounts, AI-drafted reminders, SMS send, record payments) · Generate the board report |
 | **Admin** | Users & units (create accounts with temporary passwords, link owners to units, disable, reset) · Integration status · Audit log |
 
+**Data-entry accountability** (`lib/duties.ts`): every record has one owner, a deadline, a checker and an escalation path. Staff and board see **My tasks** (`/tasks`, overdue first, with a front-desk form to log walk-ins and calls); the board sees **Accountability** (`/duties`: the matrix plus on-time scores per role). Technicians close jobs from a one-tap **job link** (`/j/<token>`, no login) with a required after photo; the manager verifies within 24h. Money gates: no receipt, no payment; payment is released by someone other than the requester, never above the PO, and only after a linked repair is verified. Overdue records remind the owner, then their supervisor, then the board (daily cron and whenever a manager opens My tasks). Deadlines live in `DUTIES` and are the "Standard" set: ack tickets 1h by day / 4h at night, receipts within 24h, rounds by end of shift, board report by the 5th.
+
 Everything is stored in Postgres. Every login, payment, ticket change, reminder and report is written to the audit log.
 
 ## Stack
