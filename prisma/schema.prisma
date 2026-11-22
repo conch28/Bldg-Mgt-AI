@@ -113,38 +113,40 @@ model Unit {
 }
 
 model WorkOrder {
-  id          String      @id @default(cuid())
-  number      Int         @unique @default(autoincrement())
-  unitId      String?
-  unit        Unit?       @relation(fields: [unitId], references: [id])
-  location    String // unit code or common area
-  title       String
-  description String?
-  category    String
-  priority    Priority    @default(MEDIUM)
-  status      WOStatus    @default(NEW)
-  slaHours    Int
-  assignee    String?
-  source      String      @default("Portal")
-  reporterId  String?
-  reporter    User?       @relation("WOReporter", fields: [reporterId], references: [id])
-  createdAt   DateTime    @default(now())
-  closedAt    DateTime?
-  rating      Int?
-  photo       String? // resident photo as a compressed JPEG data URL (photo-to-ticket)
-  aiNote      String? // what the AI saw in the photo and the advice it gave
-  roundId     String? // set when a guard logged it during a round
-  round       GuardRound? @relation(fields: [roundId], references: [id])
-  events      WOEvent[]
+  id           String      @id @default(cuid())
+  number       Int         @unique @default(autoincrement())
+  unitId       String?
+  unit         Unit?       @relation(fields: [unitId], references: [id])
+  location     String // unit code or common area
+  title        String
+  description  String?
+  category     String
+  priority     Priority    @default(MEDIUM)
+  status       WOStatus    @default(NEW)
+  slaHours     Int
+  assignee     String?
+  source       String      @default("Portal")
+  reporterId   String?
+  reporter     User?       @relation("WOReporter", fields: [reporterId], references: [id])
+  createdAt    DateTime    @default(now())
+  closedAt     DateTime?
+  rating       Int?
+  photo        String? // resident photo as a compressed JPEG data URL (photo-to-ticket)
+  aiNote       String? // what the AI saw in the photo and the advice it gave
+  roundId      String? // set when a guard logged it during a round
+  round        GuardRound? @relation(fields: [roundId], references: [id])
+  events       WOEvent[]
   // Accountability: who acknowledged, who did the work (with photo proof) and who checked it.
-  ackAt       DateTime? // first response by the manager or front desk
-  ackBy       String?
-  doneBy      String? // technician or vendor who did the work
-  doneNote    String?
-  donePhoto   String? // compressed JPEG data URL of the finished work (required to close)
-  verifiedAt  DateTime? // manager confirmed the fix (within 24h of completion)
-  verifiedBy  String?
-  jobToken    String?     @unique // one-tap job link for technicians and vendors without an account
+  ackAt        DateTime? // first response by the manager or front desk
+  ackBy        String?
+  doneBy       String? // technician or vendor who did the work
+  doneNote     String?
+  donePhoto    String? // compressed JPEG data URL of the finished work (required to close)
+  verifiedAt   DateTime? // manager confirmed the fix (within 24h of completion)
+  verifiedBy   String?
+  jobToken     String?     @unique // one-tap job link for technicians and vendors without an account
+  photoSig     String? // fingerprint of the resident's photo: "sha:dhash" (filled lazily by lib/photosig)
+  donePhotoSig String? // fingerprint of the after photo, used to spot reused or near-identical photos
 
   @@index([status])
 }
@@ -460,19 +462,19 @@ model Vendor {
  */
 
 model PMTask {
-  id            String    @id @default(cuid())
-  asset         String // e.g. Fire pump, Elevator 1-4, Genset
-  task          String
-  frequencyDays Int
-  lastDone      DateTime?
-  nextDue       DateTime
-  assignee      String?
-  vendor        String?
-  compliance    Boolean   @default(false) // required by BFP/DOLE/LGU
-  lastWorkOrder Int?
-  assetTag      String? // registry asset this schedule covers
+  id             String    @id @default(cuid())
+  asset          String // e.g. Fire pump, Elevator 1-4, Genset
+  task           String
+  frequencyDays  Int
+  lastDone       DateTime?
+  nextDue        DateTime
+  assignee       String?
+  vendor         String?
+  compliance     Boolean   @default(false) // required by BFP/DOLE/LGU
+  lastWorkOrder  Int?
+  assetTag       String? // registry asset this schedule covers
   /// Where the interval comes from. Safety-critical schedules must not stay UNVERIFIED.
-  intervalSource String   @default("UNVERIFIED") // MANUFACTURER | STATUTORY | ENGINEER | CONTRACT | UNVERIFIED
+  intervalSource String    @default("UNVERIFIED") // MANUFACTURER | STATUTORY | ENGINEER | CONTRACT | UNVERIFIED
 }
 
 /// Resident pulse: a 1-5 rating with an optional comment, after a repair (TICKET) or once a month (MONTHLY).
@@ -875,31 +877,31 @@ model MeterReading {
  */
 
 model Asset {
-  id            String          @id @default(cuid())
-  tag           String          @unique // printed on the fixture, e.g. LT-B12-HALL-2
-  name          String
-  category      String // Lighting | Aircon | Pump | Elevator | Electrical | Plumbing | Safety | Fixture
-  location      String // common area or unit code, same wording as work orders
-  installedAt   DateTime
-  lifeMonths    Int // expected life
-  warrantyUntil DateTime?
-  cost          Decimal         @db.Decimal(12, 2)
-  vendor        String?
-  status        String          @default("OK") // OK | FAULTY | RETIRED
+  id              String          @id @default(cuid())
+  tag             String          @unique // printed on the fixture, e.g. LT-B12-HALL-2
+  name            String
+  category        String // Lighting | Aircon | Pump | Elevator | Electrical | Plumbing | Safety | Fixture
+  location        String // common area or unit code, same wording as work orders
+  installedAt     DateTime
+  lifeMonths      Int // expected life
+  warrantyUntil   DateTime?
+  cost            Decimal         @db.Decimal(12, 2)
+  vendor          String?
+  status          String          @default("OK") // OK | FAULTY | RETIRED
   // Registry fields (data readiness). Specs count as verified only when a person checked them against a source.
   manufacturer    String?
   model           String?
   serial          String?
-  criticality     String    @default("NORMAL") // SAFETY | HIGH | NORMAL
-  replacementCost Decimal?  @db.Decimal(12, 2)
+  criticality     String          @default("NORMAL") // SAFETY | HIGH | NORMAL
+  replacementCost Decimal?        @db.Decimal(12, 2)
   ownerName       String? // responsible person, e.g. chief engineer
   specSource      String? // NAMEPLATE | MANUAL | INVOICE | CONTRACTOR | UNKNOWN
   verifiedBy      String?
   verifiedAt      DateTime?
   manualDocId     String? // Document holding the manual or datasheet
-  replacements  Replacement[]
-  sensors       SensorReading[]
-  createdAt     DateTime        @default(now())
+  replacements    Replacement[]
+  sensors         SensorReading[]
+  createdAt       DateTime        @default(now())
 }
 
 model StockItem {
@@ -1036,28 +1038,28 @@ model DutyNudge {
 
 /// Permits, certificates, insurance and other documents the building must keep valid.
 model ComplianceItem {
-  id           String    @id @default(cuid())
-  buildingId   String
-  kind         String // PERMIT | CERTIFICATE | INSURANCE | PLAN | PRIVACY | OTHER
-  title        String
-  authority    String // issuing body, e.g. BFP, Office of the Building Official
-  docNumber    String?
-  issuedAt     DateTime?
-  expiresAt    DateTime?
-  renewal      String? // what renewal needs, in plain words
-  ownerName    String? // responsible person
-  mandatory    Boolean   @default(true)
+  id              String    @id @default(cuid())
+  buildingId      String
+  kind            String // PERMIT | CERTIFICATE | INSURANCE | PLAN | PRIVACY | OTHER
+  title           String
+  authority       String // issuing body, e.g. BFP, Office of the Building Official
+  docNumber       String?
+  issuedAt        DateTime?
+  expiresAt       DateTime?
+  renewal         String? // what renewal needs, in plain words
+  ownerName       String? // responsible person
+  mandatory       Boolean   @default(true)
   /// The default PH checklist is a starting point. A qualified person confirms each rule applies before it counts as mandatory.
   ruleConfirmedBy String?
   ruleConfirmedAt DateTime?
-  documentId   String? // supporting file in Documents
-  status       String    @default("PENDING") // PENDING (entered, not checked) | VERIFIED | REJECTED
-  verifiedBy   String?
-  verifiedAt   DateTime?
-  enteredBy    String
-  note         String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  documentId      String? // supporting file in Documents
+  status          String    @default("PENDING") // PENDING (entered, not checked) | VERIFIED | REJECTED
+  verifiedBy      String?
+  verifiedAt      DateTime?
+  enteredBy       String
+  note            String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([buildingId, expiresAt])
 }
@@ -1115,4 +1117,49 @@ model ReadinessSignoff {
   note       String?
 
   @@unique([buildingId, reqId])
+}
+
+/// Weekly random re-check of finished work. The app draws the sample, so no one picks which jobs get checked.
+model SpotAudit {
+  id        String    @id @default(cuid())
+  kind      String // WO | ROUND | RECEIPT
+  refId     String
+  label     String // e.g. "WO-123 Leaking faucet (1202B)"
+  href      String
+  person    String // whose entry is being re-checked
+  weekOf    String // Manila date (YYYY-MM-DD) of the Monday the sample was drawn for
+  pickedAt  DateTime  @default(now())
+  dueAt     DateTime
+  checkedAt DateTime?
+  checkedBy String?
+  result    String? // PASS | ISSUE
+  note      String?
+  photo     String? // optional photo taken during the re-check
+
+  @@unique([kind, refId])
+  @@index([weekOf])
+}
+
+/// An entry the app thinks a person should look at: reused photo, copy-pasted note, or many entries made at once.
+/// A flag is a prompt to check, never proof. A manager (not the person flagged) clears or confirms it.
+model EntryFlag {
+  id          String    @id @default(cuid())
+  key         String    @unique // stable id so a cleared flag is never raised again
+  kind        String // SAME_PHOTO | SIMILAR_PHOTO | AFTER_LIKE_BEFORE | COPIED_NOTE | BATCHED | FAST_ROUND
+  person      String
+  refs        String[] // e.g. ["WO-12", "WO-40"]
+  href        String
+  title       String
+  detail      String
+  severity    Int // 1 worth a look, 2 likely a problem
+  aiNote      String?
+  explanation String? // the staff member's side, in their words
+  status      String    @default("OPEN") // OPEN | CLEARED | CONFIRMED
+  reviewedBy  String?
+  reviewedAt  DateTime?
+  reviewNote  String?
+  createdAt   DateTime  @default(now())
+
+  @@index([status])
+  @@index([person])
 }

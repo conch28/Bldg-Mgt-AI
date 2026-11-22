@@ -3,6 +3,7 @@ import { fmtDateTime, nowManila } from "@/lib/format";
 import PhotoField from "@/components/PhotoField";
 import SubmitButton from "@/components/SubmitButton";
 import { jobStart, jobDone, jobBlocked } from "./actions";
+import { staffScores } from "@/lib/staffscore";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Job · Building Mgt AI", robots: { index: false } };
@@ -14,6 +15,9 @@ export default async function Job({ params, searchParams }: { params: { token: s
   if (!wo) return <main className="jobpage"><div className="card"><h2>This job link isn&apos;t valid.</h2><p className="hint">Ask the property manager to send it again.</p></div></main>;
   const due = new Date(wo.createdAt.getTime() + wo.slaHours * 3600000), late = due < nowManila();
   const hidden = <input type="hidden" name="token" value={token} />;
+  // The technician's own record, so good work is visible to them too (only their own name is shown).
+  const who = wo.assignee ?? wo.doneBy;
+  const rec = who ? (await staffScores().catch(() => [])).find((p) => p.kind === "TECH" && p.name === who) : undefined;
   const name = <div className="field"><label htmlFor="name">Your name</label><input id="name" name="name" defaultValue={wo.assignee ?? ""} maxLength={80} /></div>;
   return (
     <main className="jobpage">
@@ -40,12 +44,17 @@ export default async function Job({ params, searchParams }: { params: { token: s
         )}
         <form action={jobDone} className="card stack">{hidden}
           <h3 style={{ margin: 0 }}>{wo.status === "IN_PROGRESS" ? "Finish" : "2. Finish"}</h3>
-          <div className="hint">Take a clear photo of the finished work. Tap the mic on your keyboard to talk instead of typing.</div>
+          <div className="hint">Tap Done as soon as you finish, and take a fresh photo of this job&apos;s finished work. Re-used photos and copied notes are flagged for the manager. Tap the mic on your keyboard to talk instead of typing.</div>
           <PhotoField label="Take after photo" required />
           <div className="field"><label htmlFor="note">What did you do? (optional)</label><textarea id="note" name="note" rows={2} maxLength={600} placeholder="e.g. Replaced the faucet cartridge, no more leak" /></div>
           <input type="hidden" name="name" value={wo.assignee ?? ""} />
           <SubmitButton label="Done" busy="Sending…" />
         </form>
+        {rec?.score != null && (
+          <div className="card"><div className="hint">Your record, last 30 days ({rec.entries} jobs)</div>
+            <div className="row" style={{ alignItems: "baseline" }}><b style={{ fontSize: 22 }}>{rec.score}%</b>{rec.band && <span className={"tag " + rec.band.cls}>{rec.band.label}</span>}{rec.bonus && <span className="tag t-ok">Bonus eligible</span>}</div>
+            <div className="hint">On time {rec.pillars.onTime.of ? Math.round((rec.pillars.onTime.ok / rec.pillars.onTime.of) * 100) : "–"}% · with photo {rec.pillars.complete.of ? Math.round((rec.pillars.complete.ok / rec.pillars.complete.of) * 100) : "–"}% · passed first check {rec.pillars.verified.of ? Math.round((rec.pillars.verified.ok / rec.pillars.verified.of) * 100) : "–"}%</div></div>
+        )}
         <form action={jobBlocked} className="card stack">{hidden}<input type="hidden" name="name" value={wo.assignee ?? ""} />
           <details><summary className="hint" style={{ cursor: "pointer" }}>Can&apos;t finish? Tell the manager</summary>
             <div className="field" style={{ marginTop: 8 }}><textarea name="note" rows={2} maxLength={600} placeholder="e.g. Need a replacement part, ETA tomorrow" aria-label="What's stopping you" /></div>

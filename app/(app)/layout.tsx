@@ -55,6 +55,7 @@ const ALL: Item[] = [
   { href: "/procurement", label: "Procurement & controls", group: "Board", icon: "cart", roles: B },
   { href: "/scorecard", label: "Manager scorecard", group: "Board", icon: "medal", roles: B },
   { href: "/duties", label: "Accountability", group: "Board", icon: "shield", roles: B },
+  { href: "/integrity", label: "Staff data scores", group: "Board", icon: "medal", roles: B },
   { href: "/data", label: "Data Center", group: "Board", icon: "layers", roles: B },
   { href: "/listings", label: "Units for sale & lease", group: "Board", icon: "key", roles: B },
   { href: "/meetings", label: "Board meetings & AGM", group: "Board", icon: "cal", roles: B },

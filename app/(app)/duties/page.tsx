@@ -31,7 +31,7 @@ export default async function Duties() {
               </div></div>
           ))}
         </div>
-        <div className="hint">On time and complete, last 30 days. Target: 95% or better.</div>
+        <div className="hint">On time and complete, last 30 days. Target: 95% or better. <Link href="/integrity">See each person&apos;s score, spot checks and entry flags</Link>.</div>
 
         <div className="card">
           <h3>Escalated now <span className="hint">({escalated.length})</span></h3>

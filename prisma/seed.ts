@@ -12,6 +12,7 @@ import { seedV4 } from "./seed-v4";
 import { seedV5 } from "./seed-v5";
 import { seedV6 } from "./seed-v6";
 import { seedV7 } from "./seed-v7";
+import { seedV8 } from "./seed-v8";
 import { SITE, allUnits } from "../lib/skyland";
 
 const prisma = new PrismaClient();
@@ -46,7 +47,7 @@ async function main() {
     throw new Error("Refusing to seed a production database. Set SEED_ALLOW_PRODUCTION=1 to override.");
   }
   // Demo deploys re-seed only when the sample data is missing or from an older version of the app.
-  const SEED_VERSION = "skyland-demo-v12";
+  const SEED_VERSION = "skyland-demo-v13";
   if (process.env.SEED_IF_EMPTY === "1" && (await prisma.building.count()) > 0) {
     const current = await prisma.auditLog.findFirst({ where: { action: "seed", detail: { contains: SEED_VERSION } } });
     if (current) { console.log("Demo data is up to date. Skipping the seed."); return; }
@@ -69,6 +70,7 @@ async function main() {
     prisma.stormCheckin.deleteMany(), prisma.stormEvent.deleteMany(), prisma.postLike.deleteMany(), prisma.post.deleteMany(), prisma.eventRsvp.deleteMany(), prisma.event.deleteMany(),
     prisma.unit.deleteMany(),
     prisma.dataIssue.deleteMany(), prisma.readinessSignoff.deleteMany(), prisma.complianceItem.deleteMany(), prisma.vendorCredential.deleteMany(),
+    prisma.spotAudit.deleteMany(), prisma.entryFlag.deleteMany(),
     prisma.dutyNudge.deleteMany(), prisma.privacyRequest.deleteMany(), prisma.loginCode.deleteMany(), prisma.errorLog.deleteMany(), prisma.rateLimit.deleteMany(),
     prisma.user.deleteMany(), prisma.building.deleteMany(),
   ]);
@@ -238,6 +240,7 @@ async function main() {
   await seedV5({ prisma, rnd, owner, manager, president, treasurer, NOW });
   await seedV6({ prisma, rnd, manager, admin, NOW });
   await seedV7({ prisma, manager, admin, president, buildingId: building.id, NOW });
+  await seedV8({ prisma, rnd, manager, admin, NOW });
 
   await prisma.auditLog.create({ data: { userId: admin.id, action: "seed", detail: `Database seeded with Skyland sample data (${SEED_VERSION})` } });
   console.log(`Done. ${units.length} units, ${bills.length} bills, ${payments.length} payments.`);

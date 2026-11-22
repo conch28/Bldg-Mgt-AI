@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/db";
 import { photoOk } from "@/lib/image";
+import { photoSig } from "@/lib/photosig";
 import { rateLimit, clientIp } from "@/lib/ratelimit";
 import { notifyUser } from "@/lib/comms";
 
@@ -39,7 +40,7 @@ export async function jobDone(fd: FormData) {
   const who = String(fd.get("name") || "").trim().slice(0, 80) || wo.assignee || "Technician";
   if (!photo) return back(token, "error=" + encodeURIComponent("Take a photo of the finished work first."));
   if (!photoOk(photo)) return back(token, "error=" + encodeURIComponent("That photo couldn't be used. Try again."));
-  await prisma.workOrder.update({ where: { id: wo.id }, data: { status: "DONE", closedAt: new Date(), donePhoto: photo, doneNote: note || null, doneBy: who, ackAt: wo.ackAt ?? new Date(), ackBy: wo.ackBy ?? who,
+  await prisma.workOrder.update({ where: { id: wo.id }, data: { status: "DONE", closedAt: new Date(), donePhoto: photo, donePhotoSig: photoSig(photo), doneNote: note || null, doneBy: who, ackAt: wo.ackAt ?? new Date(), ackBy: wo.ackBy ?? who,
     events: { create: { note: `Done, with after photo (job link).${note ? " " + note : ""}`, author: who } } } });
   await prisma.auditLog.create({ data: { action: "work_order", detail: `WO-${wo.number} marked done by ${who} via job link, with photo` } });
   await tellManagers(`WO-${wo.number} done: please verify`, `${who} finished "${wo.title}" at ${wo.location} and sent an after photo. Verify within 24 hours.`);
