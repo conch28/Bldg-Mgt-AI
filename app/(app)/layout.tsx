@@ -63,6 +63,10 @@ const ALL: Item[] = [
   { href: "/admin/users", label: "Users & units", group: "Records", icon: "users", roles: ["ADMIN"] },
   { href: "/admin/import", label: "Import data", group: "Records", icon: "doc", roles: ["ADMIN"] },
   { href: "/admin/system", label: "System & privacy", group: "Records", icon: "shield", roles: ["ADMIN"] },
+  { href: "/investor", label: "Investor snapshot", group: "Overview", icon: "bars", roles: ["INVESTOR"] },
+  { href: "/building-owner", label: "Owner overview", group: "Overview", icon: "pulse", roles: ["LANDLORD"] },
+  { href: "/investor", label: "Investor view", group: "Demo views", icon: "bars", roles: ["ADMIN"] },
+  { href: "/building-owner", label: "Building owner view", group: "Demo views", icon: "home", roles: ["ADMIN"] },
 ];
 // Bottom tab bar on phones: four destinations per role plus "More".
 const TABS: Record<string, Tab[]> = {
@@ -70,6 +74,8 @@ const TABS: Record<string, Tab[]> = {
   BOARD: [{ href: "/happiness", label: "Happiness", icon: "heart" }, { href: "/board", label: "Overview", icon: "pulse" }, { href: "/advisor", label: "Advisor", icon: "bulb" }, { href: "/procurement", label: "Spending", icon: "cart" }],
   MANAGER: [{ href: "/today", label: "Today", icon: "check" }, { href: "/work-orders", label: "Requests", icon: "wrench" }, { href: "/frontdesk", label: "Front desk", icon: "shield" }, { href: "/comms", label: "Updates", icon: "mega" }],
   ADMIN: [{ href: "/today", label: "Today", icon: "check" }, { href: "/work-orders", label: "Requests", icon: "wrench" }, { href: "/comms", label: "Updates", icon: "mega" }, { href: "/admin/users", label: "Users", icon: "users" }],
+  INVESTOR: [{ href: "/investor", label: "Snapshot", icon: "bars" }, { href: "/account", label: "Account", icon: "users" }],
+  LANDLORD: [{ href: "/building-owner", label: "Overview", icon: "pulse" }, { href: "/account", label: "Account", icon: "users" }],
   GUARD: [{ href: "/frontdesk", label: "Front desk", icon: "shield" }, { href: "/rounds", label: "Rounds", icon: "route" }, { href: "/sos", label: "SOS", icon: "alert" }, { href: "/moving", label: "Moves", icon: "box" }],
 };
 

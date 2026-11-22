@@ -9,6 +9,8 @@ const ACCOUNTS: [string, string, string, string][] = [
   ["⭐", "Board president", "Resident happiness, finances, approvals", "president@skyland.test"],
   ["🧰", "Property manager", "Today's to-do list, tickets, updates", "manager@skyland.test"],
   ["🛡️", "Lobby guard", "Visitor passes, SOS alerts, moves", "guard@skyland.test"],
+  ["🏢", "Building owner", "Occupancy, income, spending, asset health", "building@skyland.test"],
+  ["📈", "Investor", "Business snapshot: unit economics and results", "investor@skyland.test"],
 ];
 
 const errText = (e?: string | null) => e === "RATE_LIMIT" ? "Too many tries. Please wait 15 minutes and try again." : e;

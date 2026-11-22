@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireRole, audit } from "@/lib/auth";
+import { requireRole, PEOPLE, audit } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { rateLimit } from "@/lib/ratelimit";
 import { GROUPS } from "@/lib/community";
@@ -26,7 +26,7 @@ export async function createPost(fd: FormData) {
 }
 
 export async function likePost(fd: FormData) {
-  const u = await requireRole();
+  const u = await requireRole(...PEOPLE);
   const postId = String(fd.get("id"));
   const had = await prisma.postLike.findUnique({ where: { postId_userId: { postId, userId: u.id } } });
   if (had) await prisma.postLike.delete({ where: { id: had.id } }); else await prisma.postLike.create({ data: { postId, userId: u.id } }).catch(() => null);
@@ -46,7 +46,7 @@ export async function moderatePost(fd: FormData) {
 }
 
 export async function deletePost(fd: FormData) {
-  const u = await requireRole();
+  const u = await requireRole(...PEOPLE);
   const post = await prisma.post.findUnique({ where: { id: String(fd.get("id")) } });
   if (!post || (post.userId !== u.id && u.role !== "MANAGER" && u.role !== "ADMIN")) redirect("/neighbors");
   await prisma.post.delete({ where: { id: post.id } });
@@ -69,7 +69,7 @@ export async function createEvent(fd: FormData) {
 }
 
 export async function rsvp(fd: FormData) {
-  const u = await requireRole();
+  const u = await requireRole(...PEOPLE);
   const eventId = String(fd.get("id"));
   const had = await prisma.eventRsvp.findUnique({ where: { eventId_userId: { eventId, userId: u.id } } });
   if (had) await prisma.eventRsvp.delete({ where: { id: had.id } }); else await prisma.eventRsvp.create({ data: { eventId, userId: u.id, name: u.name } }).catch(() => null);

@@ -32,6 +32,16 @@ export const CARDS: Record<string, Card[]> = {
     ...MANAGER.slice(0, 3),
     { icon: "👥", t: "Users, data and privacy", b: "Add owners and tenants, import data from spreadsheets, and handle privacy requests under Records." },
   ],
+  INVESTOR: [
+    { icon: "👋", t: "Welcome po!", b: "This is a read-only investor view of Building Mgt AI, using live sample data from Skyland Plaza." },
+    { icon: "📈", t: "The business on one page", b: "Our unit economics per building, the path to 30 buildings, and the results residents feel." },
+    { icon: "🔒", t: "Look around freely", b: "Nothing here can change data. To see the app from a resident's or manager's seat, sign out and tap another demo login." },
+  ],
+  LANDLORD: [
+    { icon: "👋", t: "Welcome po, building owner!", b: "This is your whole building on one page: occupancy, income, spending, asset health and how happy residents are." },
+    { icon: "💰", t: "Income and spending", b: "Dues collected against operating costs each month, so you see the surplus without waiting for a report." },
+    { icon: "🔧", t: "Assets and capex", b: "Equipment nearing the end of its life, with estimated replacement costs, so big bills are never a surprise." },
+  ],
   GUARD: [
     { icon: "👋", t: "Welcome to the front desk", b: "This is your guard station. The big buttons at the bottom are all you need." },
     { icon: "📷", t: "Check every guest", b: "Scan the guest's QR or type the 6-letter code. Make sure their face matches the photo on the pass." },

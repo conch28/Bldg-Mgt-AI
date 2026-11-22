@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireRole } from "@/lib/auth";
+import { requireRole, PEOPLE } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHead } from "@/components/ui";
 import SubmitButton from "@/components/SubmitButton";
@@ -16,7 +16,7 @@ const RISK_CLS = { high: "t-bad", medium: "t-warn", low: "t-ok" } as const;
 const CI: Record<string, { label: string; color: string }> = { OK: { label: "Safe", color: "#009E73" }, DAMAGE: { label: "Damage", color: "#E69F00" }, HELP: { label: "Needs help", color: "#D55E00" } };
 
 export default async function Typhoon({ searchParams }: { searchParams: { ok?: string; error?: string; drill?: string } }) {
-  const u = await requireRole();
+  const u = await requireRole(...PEOPLE);
   const owner = u.role === "OWNER", mgr = u.role === "MANAGER" || u.role === "ADMIN";
   const storm = await activeStorm();
   // On the demo site, a storm that was started from the drill keeps showing the drill forecast.
