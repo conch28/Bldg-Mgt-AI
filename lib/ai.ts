@@ -393,3 +393,38 @@ export async function writeDoc(system: string, facts: string, fallback: string):
     return text ? { text, ai: true } : { text: fallback, ai: false };
   } catch { return { text: fallback, ai: false }; }
 }
+
+// ---------- Entry checks (reused photos, copied notes, batched entries) ----------
+const PhotoPair = z.object({
+  same_shot: z.boolean().describe("True if both images are the same photograph (possibly re-saved, cropped, brightened or resized)"),
+  same_spot: z.boolean().describe("True if both show the same physical spot or fixture, even if taken at different times"),
+  why: z.string().describe("One short, neutral sentence on what you see that supports the answer"),
+});
+export type PhotoPairT = z.infer<typeof PhotoPair>;
+
+/**
+ * Second opinion on two proof photos the fingerprint check found nearly identical.
+ * Returns null with no key or on failure; the fingerprint result then stands on its own.
+ */
+export async function comparePhotos(a: string, b: string, context: string): Promise<PhotoPairT | null> {
+  if (!aiEnabled()) return null;
+  const img = (s: string) => { const m = s.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/); return m ? { type: "image", source: { type: "base64", media_type: m[1], data: m[2] } } : null; };
+  const A = img(a), B = img(b);
+  if (!A || !B) return null;
+  try {
+    const res = await client().messages.parse({
+      model: MODEL, max_tokens: 1500, output_config: { effort: "low", format: zodOutputFormat(PhotoPair) },
+      system: "You help a condominium property manager in Metro Manila check proof-of-work photos. Two after photos were attached to two different repair jobs. Say whether they are the same photograph and whether they show the same spot. Describe only what you can see. Do not accuse anyone; there are innocent reasons (the same fixture repaired twice, two tickets for one problem).",
+      messages: [{ role: "user", content: [{ type: "text", text: `Photo 1 and photo 2. ${context}` }, A, B] }],
+    } as any) as any;
+    return (res.parsed_output as PhotoPairT | null) ?? null;
+  } catch { return null; }
+}
+
+/** A fair, short note for the manager on why an entry was flagged and what to check. Template without a key. */
+export async function explainFlag(facts: string, fallback: string): Promise<{ text: string; ai: boolean }> {
+  return writeDoc(
+    "You help a condominium property manager in Metro Manila review staff data entry. Given why an entry was flagged, write one or two plain sentences (under 45 words): what to check, and one innocent explanation to rule out first. Fair and coaching in tone; never call anyone dishonest. No markdown.",
+    facts, fallback,
+  );
+}

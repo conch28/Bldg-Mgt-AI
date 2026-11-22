@@ -7,6 +7,10 @@ import SubmitButton from "@/components/SubmitButton";
 import { DUTIES, allTasks, tasksFor, roleScores, runDutyNudges, dueLabel, LEVEL_LABEL, LEVEL_CLS, OWNER_LABEL, type Owner } from "@/lib/duties";
 import { captureError } from "@/lib/monitor";
 import { createWorkOrder } from "../work-orders/actions";
+import { explainFlag } from "../integrity/actions";
+import { prisma } from "@/lib/db";
+import { staffScores, coachingTip, pillarPct, PILLARS, SCORE_POLICY } from "@/lib/staffscore";
+import { FLAG_KIND } from "@/lib/integrity";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +19,13 @@ export default async function Tasks({ searchParams }: { searchParams: { ok?: str
   const u = await requireRole("MANAGER", "ADMIN", "GUARD", "BOARD");
   // Reminders go out when staff open their list as well as from the daily job, so nothing waits a day.
   if (u.role === "MANAGER" || u.role === "ADMIN") await runDutyNudges().catch((e) => captureError(e, { source: "duties", path: "/tasks" }));
-  const [all, scores] = await Promise.all([allTasks(), roleScores()]);
+  const [all, scores, people, myFlags] = await Promise.all([
+    allTasks(), roleScores(),
+    u.role === "BOARD" ? Promise.resolve([]) : staffScores(),
+    u.role === "BOARD" ? Promise.resolve([]) : prisma.entryFlag.findMany({ where: { status: "OPEN", person: { contains: u.name } }, orderBy: { createdAt: "desc" } }),
+  ]);
+  const me = people.find((p) => p.name === u.name && (u.role === "GUARD" ? p.kind === "GUARD" : p.kind === "MANAGER"));
+  const flagsAboutMe = myFlags.filter((f) => f.person.split(" and ").includes(u.name));
   const mine = tasksFor(all, u.role);
   const overdue = mine.filter((t) => t.level >= 1).length;
   const myScore = scores.find((s) => s.owner === u.role);
@@ -35,6 +45,38 @@ export default async function Tasks({ searchParams }: { searchParams: { ok?: str
           <Kpi k="Due soon" v={mine.length - overdue} />
           <Kpi k="Your on-time score (30 days)" v={myScore?.pct == null ? "–" : `${myScore.pct}%`} d={<Link href="/duties" className="hint">How it's measured</Link>} />
         </div>
+
+        {me && (
+          <div className="card">
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+              <div><h3 style={{ margin: 0 }}>Your data score</h3><div className="hint">Last 30 days, {me.entries} entries. {SCORE_POLICY.bonusMin}%+ earns the monthly data bonus.</div></div>
+              <div style={{ textAlign: "right" }}><div className="big" style={{ fontSize: 30 }}>{me.score == null ? "–" : `${me.score}%`}</div>{me.band && <span className={"tag " + me.band.cls}>{me.band.label}</span>}</div>
+            </div>
+            <div className="grid g4" style={{ marginTop: 8 }}>
+              {PILLARS.map((x) => { const v = pillarPct(me.pillars[x.key]); return <div key={x.key}><div className="hint" style={{ display: "flex", justifyContent: "space-between" }}><span>{x.label}</span><b>{v == null ? "–" : `${v}%`}</b></div><div className="meter"><i style={{ width: `${v ?? 0}%` }} /></div></div>; })}
+            </div>
+            {coachingTip(me) && <div className="hint" style={{ marginTop: 8 }}>💬 {coachingTip(me)}</div>}
+            {me.misses.length > 0 && <details style={{ marginTop: 6 }}><summary className="hint" style={{ cursor: "pointer" }}>What lowered it ({me.misses.length})</summary><div className="list">{me.misses.map((m, i) => <div className="li" key={i}><span className="hint">{m.text}</span></div>)}</div></details>}
+          </div>
+        )}
+
+        {flagsAboutMe.length > 0 && (
+          <div className="card">
+            <h3>Entries to explain <span className="hint">({flagsAboutMe.length})</span></h3>
+            <div className="hint">The app noticed something unusual. It isn&apos;t a finding: tell your side and the reviewer will check. It only counts if it&apos;s confirmed.</div>
+            {flagsAboutMe.map((f) => (
+              <div className="task" key={f.id}><div className="tbody"><b>{f.title}</b><div className="hint">{f.detail}</div>
+                <div className="tmeta"><span className="tag t-warn">{FLAG_KIND[f.kind]?.label ?? f.kind}</span></div>
+                {f.explanation ? <div className="hint" style={{ marginTop: 4 }}>Your side: “{f.explanation}”</div> : (
+                  <form action={explainFlag} className="inline-form" style={{ marginTop: 6 }}>
+                    <input type="hidden" name="id" value={f.id} /><input type="hidden" name="back" value="/tasks" />
+                    <input name="explanation" required minLength={5} maxLength={600} placeholder="What happened? e.g. I logged them after the typhoon drill" aria-label="Your explanation" />
+                    <SubmitButton label="Send" small cls="btn" />
+                  </form>
+                )}</div></div>
+            ))}
+          </div>
+        )}
 
         <div className="card">
           <h3>To do</h3>

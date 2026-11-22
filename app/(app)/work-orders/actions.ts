@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireRole, audit } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { photoOk } from "@/lib/image";
+import { photoSig } from "@/lib/photosig";
 import { notifyUser } from "@/lib/comms";
 
 const SLA = { HIGH: 4, MEDIUM: 24, LOW: 72 } as const;
@@ -61,7 +62,7 @@ export async function closeWithPhoto(fd: FormData) {
   if (!photo) return fail(fd, `WO-${wo.number}: take a photo of the finished work first.`);
   if (!photoOk(photo)) return fail(fd, "That photo couldn't be used. Try again.");
   const doneBy = by || wo.assignee || u.name;
-  await prisma.workOrder.update({ where: { id }, data: { status: "DONE", closedAt: wo.closedAt ?? new Date(), donePhoto: photo, doneNote: note || null, doneBy, ackAt: wo.ackAt ?? new Date(), ackBy: wo.ackBy ?? u.name,
+  await prisma.workOrder.update({ where: { id }, data: { status: "DONE", closedAt: wo.closedAt ?? new Date(), donePhoto: photo, donePhotoSig: photoSig(photo), doneNote: note || null, doneBy, ackAt: wo.ackAt ?? new Date(), ackBy: wo.ackBy ?? u.name,
     events: { create: { note: `Marked done by ${u.name} for ${doneBy}, with after photo.${note ? " " + note : ""}`, author: u.name } } } });
   await audit(u.id, "work_order", `WO-${wo.number} closed with photo (done by ${doneBy})`);
   revalidatePath("/work-orders"); revalidatePath("/tasks");
@@ -81,7 +82,7 @@ export async function verifyWorkOrder(fd: FormData) {
     if (wo.reporterId) await notifyUser(wo.reporterId, `Fixed: ${wo.title}`, `Your request WO-${wo.number} is done and checked by the property manager. Paki-rate po ang serbisyo sa app (1 tap). Salamat po!`, ["APP"]);
   } else {
     if (!note) return fail(fd, `WO-${wo.number}: say what still needs fixing.`);
-    await prisma.workOrder.update({ where: { id }, data: { status: "IN_PROGRESS", closedAt: null, donePhoto: null, verifiedAt: null, verifiedBy: null, events: { create: { note: `Sent back by ${u.name}: ${note}`, author: u.name } } } });
+    await prisma.workOrder.update({ where: { id }, data: { status: "IN_PROGRESS", closedAt: null, donePhoto: null, donePhotoSig: null, verifiedAt: null, verifiedBy: null, events: { create: { note: `Sent back by ${u.name}: ${note}`, author: u.name } } } });
     await audit(u.id, "work_order", `WO-${wo.number} sent back: ${note}`);
   }
   revalidatePath("/work-orders"); revalidatePath("/tasks");

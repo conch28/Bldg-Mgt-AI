@@ -10,8 +10,8 @@ type Ctx = { prisma: PrismaClient; rnd: () => number; manager: User; admin: User
 const MIN = 60000, H = 3600000;
 
 /** Simple drawn "after photo" so the demo has proof images without shipping real photos. */
-function afterPhoto(label: string, hue: number) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240"><rect width="320" height="240" fill="hsl(${hue},25%,86%)"/><rect x="40" y="40" width="240" height="150" rx="12" fill="hsl(${hue},20%,96%)" stroke="hsl(${hue},25%,60%)" stroke-width="4"/><circle cx="250" cy="70" r="18" fill="#2f8a4e"/><path d="M241 70l6 6 12-12" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round"/><text x="160" y="125" font-family="Arial" font-size="18" text-anchor="middle" fill="#14231f">${label.replace(/[<&>]/g, "").slice(0, 26)}</text><text x="160" y="215" font-family="Arial" font-size="13" text-anchor="middle" fill="#5b6b67">After photo</text></svg>`;
+function afterPhoto(label: string, hue: number, ref = "") {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240"><rect width="320" height="240" fill="hsl(${hue},25%,86%)"/><rect x="40" y="40" width="240" height="150" rx="12" fill="hsl(${hue},20%,96%)" stroke="hsl(${hue},25%,60%)" stroke-width="4"/><circle cx="250" cy="70" r="18" fill="#2f8a4e"/><path d="M241 70l6 6 12-12" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round"/><text x="160" y="125" font-family="Arial" font-size="18" text-anchor="middle" fill="#14231f">${label.replace(/[<&>]/g, "").slice(0, 26)}</text><text x="160" y="215" font-family="Arial" font-size="13" text-anchor="middle" fill="#5b6b67">After photo${ref ? ` · ${ref}` : ""}</text></svg>`;
   return "data:image/svg+xml;base64," + Buffer.from(svg).toString("base64");
 }
 function receiptPhoto(vendor: string, amount: number) {
@@ -34,7 +34,7 @@ export async function seedV6({ prisma, rnd, manager, admin, NOW }: Ctx) {
     if (w.status !== "DONE" && w.assignee) data.jobToken = randomBytes(18).toString("base64url");
     if (w.status === "DONE" && w.closedAt) {
       data.doneBy = w.assignee ?? "Rudy M.";
-      if (rnd() < 0.9 || leaveUnverified.has(w.id)) data.donePhoto = afterPhoto(w.title, Math.floor(rnd() * 360));
+      if (rnd() < 0.9 || leaveUnverified.has(w.id)) data.donePhoto = afterPhoto(w.title, Math.floor(rnd() * 360), `WO-${w.number}`);
       if (!leaveUnverified.has(w.id) && w.closedAt.getTime() < NOW.getTime() - 4 * H) {
         const late = rnd() < 0.08;
         data.verifiedAt = new Date(Math.min(NOW.getTime() - MIN, w.closedAt.getTime() + (late ? 30 + rnd() * 20 : 1 + rnd() * 18) * H));

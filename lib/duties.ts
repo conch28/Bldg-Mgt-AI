@@ -98,6 +98,14 @@ export const DUTIES: Duty[] = [
   { id: "docs", area: "Reports and records", record: "Signed contracts, permits, certificates", owner: ["ADMIN", "MANAGER"], tracked: false,
     how: "Documents: upload the PDF or a photo, pick the category. Permits (fire safety, elevator, sanitary) go in Compliance.",
     deadline: "Within 3 days of signing or issue", checker: "Board", escalate: "Missing permits show on the go-live checklist" },
+  { id: "spot-audit", area: "Reports and records", record: "Weekly spot check of finished work", owner: ["MANAGER"], tracked: true, esc: [24, 72],
+    how: "Staff data scores, Spot checks: the app picks a random sample each Monday (10% of finished jobs, 2 guard rounds, 1 receipt). Go and look, then tap Passed or Found a problem.",
+    deadline: "By Sunday of the same week", checker: "Board (results on Staff data scores)", escalate: "Operations head after 24h, board after 72h",
+    gate: "The app picks the sample, so no one chooses which work gets checked" },
+  { id: "flag-review", area: "Reports and records", record: "Review an entry flag (reused photo, copied note, batched entries)", owner: ["MANAGER", "ADMIN"], tracked: true, esc: [24, 96],
+    how: "Staff data scores, Entry flags: open the entries, hear the staff member's side, then tap Looks fine or Confirm and coach. Flags about the manager go to the operations head.",
+    deadline: "Within 48 hours of the flag", checker: "Operations head", escalate: "Operations head after 24h, board after 4 days",
+    gate: "Only confirmed flags lower a score; open flags never count against anyone" },
   { id: "master-data", area: "Reports and records", record: "Owner, tenant and unit details", owner: ["OWNER", "ADMIN"], tracked: false,
     how: "Owners update their own contact details in Account; tenants are recorded through the lease/move-in flow; admin imports the initial list from CSV.",
     deadline: "Before move-in; owners confirm details every 12 months", checker: "Admin", escalate: "Units with no contact number appear in Admin" },
@@ -134,7 +142,7 @@ const WINDOW_DAYS = 21;
 export async function allTasks(now = nowManila()): Promise<Task[]> {
   const since = new Date(now.getTime() - WINDOW_DAYS * D);
   const soon = new Date(now.getTime() + 2 * H);
-  const [wos, pulses, prs, rounds, pms, reports, meetings, vendors] = await Promise.all([
+  const [wos, pulses, prs, rounds, pms, reports, meetings, vendors, audits, flags] = await Promise.all([
     prisma.workOrder.findMany({ where: { createdAt: { gte: since }, OR: [{ status: { not: "DONE" } }, { verifiedAt: null }] }, select: { id: true, number: true, title: true, location: true, status: true, priority: true, slaHours: true, assignee: true, createdAt: true, closedAt: true, ackAt: true, verifiedAt: true, category: true } }),
     prisma.pulse.findMany({ where: { score: { lte: 2 }, followedUp: null, createdAt: { gte: since } }, select: { id: true, unitCode: true, score: true, comment: true, createdAt: true } }),
     prisma.purchaseRequest.findMany({ where: { status: { in: ["PENDING", "RECEIVED"] } }, include: { quotes: true } }),
@@ -143,9 +151,11 @@ export async function allTasks(now = nowManila()): Promise<Task[]> {
     prisma.report.findMany({ select: { period: true } }),
     prisma.meeting.findMany({ where: { startsAt: { gte: new Date(now.getTime() - 60 * D), lte: now }, minutes: null } }),
     prisma.vendor.findMany({ where: { active: true, OR: [{ insuranceExpiry: { lte: new Date(now.getTime() + 30 * D) } }, { contractEnd: { lte: new Date(now.getTime() + 30 * D) } }] } }),
+    prisma.spotAudit.findMany({ where: { checkedAt: null, pickedAt: { gte: since } }, select: { id: true, label: true, person: true, dueAt: true } }),
+    prisma.entryFlag.findMany({ where: { status: "OPEN", createdAt: { gte: since } }, select: { id: true, title: true, person: true, createdAt: true } }),
   ]);
   const t: Task[] = [];
-  const push = (x: Omit<Task, "level">) => { if (x.dueAt <= soon || x.duty === "vendor-docs" || x.duty === "pm" || x.duty === "report" || x.duty === "round") t.push({ ...x, level: levelFor(x.duty, x.dueAt, now) }); };
+  const push = (x: Omit<Task, "level">) => { if (x.dueAt <= soon || ["vendor-docs", "pm", "report", "round", "spot-audit", "flag-review"].includes(x.duty)) t.push({ ...x, level: levelFor(x.duty, x.dueAt, now) }); };
 
   for (const w of wos) {
     const ref = `WO-${w.number} ${w.title} (${w.location})`;
@@ -184,6 +194,10 @@ export async function allTasks(now = nowManila()): Promise<Task[]> {
     const dates = [v.insuranceExpiry && { what: "insurance", d: v.insuranceExpiry }, v.contractEnd && { what: "contract", d: v.contractEnd }].filter(Boolean) as { what: string; d: Date }[];
     for (const x of dates.filter((x) => x.d.getTime() <= now.getTime() + 30 * D)) push({ key: `vendor:${v.id}:${x.what}:${x.d.toISOString().slice(0, 10)}`, duty: "vendor-docs", title: `Renew ${v.name} ${x.what}`, detail: `${x.d < now ? "Expired" : "Expires"} ${x.d.toLocaleDateString("en-PH", { timeZone: "Asia/Manila", day: "numeric", month: "short" })}`, href: "/vendors", owner: "ADMIN", dueAt: x.d });
   }
+  for (const a of audits) push({ key: `spot-audit:${a.id}`, duty: "spot-audit", title: `Spot check: ${a.label}`, detail: `Entered by ${a.person} · picked at random by the app`, href: "/integrity?tab=audits", owner: "MANAGER", dueAt: a.dueAt });
+  // Flags about a manager are reviewed by the operations head, never by the manager themselves.
+  const mgrNames = new Set((await prisma.user.findMany({ where: { role: "MANAGER" }, select: { name: true } })).map((m) => m.name));
+  for (const f of flags) push({ key: `flag:${f.id}`, duty: "flag-review", title: `Review flag: ${f.title}`, detail: `About ${f.person}`, href: "/integrity?tab=flags", owner: f.person.split(" and ").some((n) => mgrNames.has(n)) ? "ADMIN" : "MANAGER", dueAt: new Date(f.createdAt.getTime() + 48 * H) });
   // Upcoming items further than 2 days out are noise; keep due-soon and overdue ones.
   return t.filter((x) => x.dueAt.getTime() <= now.getTime() + 7 * D).sort((a, b) => b.level - a.level || a.dueAt.getTime() - b.dueAt.getTime());
 }
