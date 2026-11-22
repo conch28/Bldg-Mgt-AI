@@ -7,6 +7,7 @@ import Tour from "@/components/Tour";
 import { prisma } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { demoMode } from "@/lib/env";
+import { allTasks, tasksFor } from "@/lib/duties";
 
 type Item = NavItem & { roles: string[] };
 const B = ["BOARD", "MANAGER", "ADMIN"], M = ["MANAGER", "ADMIN"], O = ["OWNER"], STAFF = ["MANAGER", "ADMIN", "GUARD"];
@@ -31,6 +32,8 @@ const ALL: Item[] = [
   { href: "/typhoon", label: "Typhoon & safety", group: "Community", icon: "storm", roles: O },
 
   { href: "/today", label: "Today", group: "Run the building", icon: "check", roles: M },
+  { href: "/tasks", label: "My tasks", group: "Run the building", icon: "vote", roles: STAFF },
+  { href: "/tasks", label: "My tasks", group: "Board", icon: "vote", roles: ["BOARD"] },
   { href: "/frontdesk", label: "Front desk", group: "Run the building", icon: "shield", roles: STAFF },
   { href: "/rounds", label: "Guard rounds", group: "Run the building", icon: "route", roles: STAFF },
   { href: "/procurement", label: "Receive deliveries", group: "Run the building", icon: "cart", roles: ["GUARD"] },
@@ -51,6 +54,9 @@ const ALL: Item[] = [
   { href: "/advisor", label: "AI advisor & weather", group: "Board", icon: "bulb", roles: B },
   { href: "/procurement", label: "Procurement & controls", group: "Board", icon: "cart", roles: B },
   { href: "/scorecard", label: "Manager scorecard", group: "Board", icon: "medal", roles: B },
+  { href: "/duties", label: "Accountability", group: "Board", icon: "shield", roles: B },
+  { href: "/integrity", label: "Staff data scores", group: "Board", icon: "medal", roles: B },
+  { href: "/data", label: "Data Center", group: "Board", icon: "layers", roles: B },
   { href: "/listings", label: "Units for sale & lease", group: "Board", icon: "key", roles: B },
   { href: "/meetings", label: "Board meetings & AGM", group: "Board", icon: "cal", roles: B },
   { href: "/polls", label: "Voting & proxies", group: "Board", icon: "vote", roles: B },
@@ -76,7 +82,7 @@ const TABS: Record<string, Tab[]> = {
   ADMIN: [{ href: "/today", label: "Today", icon: "check" }, { href: "/work-orders", label: "Requests", icon: "wrench" }, { href: "/comms", label: "Updates", icon: "mega" }, { href: "/admin/users", label: "Users", icon: "users" }],
   INVESTOR: [{ href: "/investor", label: "Snapshot", icon: "bars" }, { href: "/account", label: "Account", icon: "users" }],
   LANDLORD: [{ href: "/building-owner", label: "Overview", icon: "pulse" }, { href: "/account", label: "Account", icon: "users" }],
-  GUARD: [{ href: "/frontdesk", label: "Front desk", icon: "shield" }, { href: "/rounds", label: "Rounds", icon: "route" }, { href: "/sos", label: "SOS", icon: "alert" }, { href: "/moving", label: "Moves", icon: "box" }],
+  GUARD: [{ href: "/frontdesk", label: "Front desk", icon: "shield" }, { href: "/rounds", label: "Rounds", icon: "route" }, { href: "/tasks", label: "Tasks", icon: "vote" }, { href: "/sos", label: "SOS", icon: "alert" }],
 };
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -94,7 +100,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     u.role === "OWNER" ? prisma.inquiry.count({ where: { listing: { userId: u.id }, status: "NEW" } }) : 0,
   ]);
   const toSign = u.role === "BOARD" || isMgr ? await prisma.purchaseRequest.count({ where: { status: "PENDING", requestedBy: { not: u.id } } }) : u.role === "GUARD" ? await prisma.purchaseRequest.count({ where: { status: "ORDERED" } }) : 0;
-  const counts: Record<string, number> = { "/comms": pending, "/work-orders": escalated, "/updates": unread, "/today": pending + escalated + risk, "/happiness": risk, "/sos": sos, "/property": inquiries, "/procurement": toSign };
+  const dataP0 = ["BOARD", "MANAGER", "ADMIN"].includes(u.role) ? await prisma.dataIssue.count({ where: { buildingId: u.buildingId, status: "OPEN", severity: "P0" } }) : 0;
+  const overdue = u.role === "OWNER" ? 0 : tasksFor(await allTasks().catch(() => []), u.role).filter((t) => t.level >= 1).length;
+  const counts: Record<string, number> = { "/tasks": overdue, "/comms": pending, "/work-orders": escalated, "/updates": unread, "/today": pending + escalated + risk, "/happiness": risk, "/sos": sos, "/property": inquiries, "/procurement": toSign, "/data": dataP0 };
   const items = ALL.filter((i) => i.roles.includes(u.role)).map(({ roles, ...i }) => ({ ...i, count: counts[i.href] || 0 }));
   items.push({ href: `${homeFor(u.role)}?tour=1`, label: "App tour", group: "Help", icon: "spark", count: 0 });
   const tabs = (TABS[u.role] ?? []).map((t) => ({ ...t, count: counts[t.href] || 0 }));
@@ -105,6 +113,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <Nav items={items} tabs={tabs} user={{ name: u.name, role: u.role }} building={b?.name ?? ""} />
         <div className="main" id="main">
           {isStaff && sos > 0 && <Link href="/sos" className="sos-banner" role="alert"><b>SOS</b> {sos} emergency alert{sos > 1 ? "s" : ""} need{sos > 1 ? "" : "s"} a response now. Tap to open.</Link>}
+          {overdue > 0 && <Link href="/tasks" className="overdue-banner"><b>{overdue} record{overdue > 1 ? "s" : ""} overdue.</b> Tap to enter {overdue > 1 ? "them" : "it"} now.</Link>}
           {children}
         </div>
         <Suspense fallback={null}><Tour uid={u.id} role={u.role} /></Suspense>

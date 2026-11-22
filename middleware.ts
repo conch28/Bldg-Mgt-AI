@@ -13,6 +13,10 @@ const RULES: [RegExp, string[]][] = [
   [/^\/(board|scorecard|happiness)/, ["BOARD", "MANAGER", "ADMIN"]],
   [/^\/(work-orders|collections|comms|maintenance|vendors|reports)/, ["BOARD", "MANAGER", "ADMIN"]],
   [/^\/today/, ["MANAGER", "ADMIN"]],
+  [/^\/data\/assets\/(?!(qr|import)$)[^/]+$/, ["BOARD", "MANAGER", "ADMIN", "GUARD"]], // asset QR pages: guards scan to report faults
+  [/^\/data(\/|$)/, ["BOARD", "MANAGER", "ADMIN"]],
+  [/^\/tasks(\/|$)/, ["MANAGER", "ADMIN", "GUARD", "BOARD"]],
+  [/^\/(duties|integrity)(\/|$)/, ["BOARD", "MANAGER", "ADMIN"]],
   [/^\/(energy|meetings|equipment|channels)(\/|$)/, ["BOARD", "MANAGER", "ADMIN"]],
   [/^\/neighbors(\/|$)/, ["OWNER", "BOARD", "MANAGER", "ADMIN"]],
   [/^\/frontdesk/, ["MANAGER", "ADMIN", "GUARD"]],
@@ -40,4 +44,4 @@ export default withAuth((req) => {
   },
 });
 
-export const config = { matcher: ["/((?!api/auth|api/cron|api/paymongo|api/messenger|api/viber|p/|api/health|api/log-error|login|privacy|offline|_next|favicon.ico|robots.txt|manifest.webmanifest|sw.js|icons).*)"] };
+export const config = { matcher: ["/((?!api/auth|api/cron|api/paymongo|api/messenger|api/viber|p/|j/|api/health|api/log-error|login|privacy|offline|_next|favicon.ico|robots.txt|manifest.webmanifest|sw.js|icons).*)"] };

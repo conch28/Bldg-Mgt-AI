@@ -789,3 +789,16 @@ h2.section-h{font-size:17px;margin:6px 0 0}
 .tips-fab{position:fixed;right:calc(18px + env(safe-area-inset-right,0px));bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:25;width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--accent);font-weight:800;font-size:17px;box-shadow:0 6px 18px -8px rgba(0,0,0,.35)}
 @media (max-width:860px){.tips-fab{bottom:calc(84px + env(safe-area-inset-bottom,0px));right:calc(12px + env(safe-area-inset-right,0px))}}
 @media print{.tips-fab{display:none}}
+/* Data-entry accountability: job link, My tasks, matrix */
+.jobpage{min-height:100vh;padding:16px;background:var(--bg);max-width:520px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.jobpage .field{display:flex;flex-direction:column;gap:4px}.jobpage .field label{font-size:12px;color:var(--muted);font-weight:600}
+.jobpage input,.jobpage textarea{font:inherit;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--fg)}
+.jobpage .btn{min-height:46px;font-size:16px}
+.task{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--line)}.task:last-child{border-bottom:0}
+.task .tbody{flex:1;min-width:0}.task .tbody b{display:block}.task .tmeta{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;align-items:center}
+.task .btn{flex-shrink:0}
+.task.lv3{box-shadow:inset 3px 0 0 var(--bad);padding-left:10px}.task.lv2{box-shadow:inset 3px 0 0 var(--bad);padding-left:10px}.task.lv1{box-shadow:inset 3px 0 0 var(--warn);padding-left:10px}
+.overdue-banner{display:block;margin:0 0 12px;padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--warn) 16%,var(--panel));border:1px solid color-mix(in srgb,var(--warn) 45%,var(--line));color:var(--fg);text-decoration:none;font-size:14px}
+.matrix td{vertical-align:top;font-size:13px}.matrix td b{font-size:13.5px}.matrix .gate{color:var(--bad);font-weight:600}
+.meter{height:8px;border-radius:6px;background:var(--panel-2);overflow:hidden}.meter>i{display:block;height:100%;background:var(--ok)}
+.wo-proof{display:flex;gap:10px;align-items:flex-start;margin-top:6px;flex-wrap:wrap}.wo-proof img{width:96px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}

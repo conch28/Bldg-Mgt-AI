@@ -7,12 +7,12 @@ import SubmitButton from "@/components/SubmitButton";
 import PhotoField from "@/components/PhotoField";
 import { LIMITS, amountOf, approvalProgress, approvalsOf, canApprove, canReceive, controlFlags, ruleFor, savingsThisYear } from "@/lib/procurement";
 import { peso, pesoK, fmtDate, fmtDateTime, nowManila } from "@/lib/format";
-import { addQuote, approve, createRequest, issuePO, receive, reject, submitForApproval } from "./actions";
+import { addQuote, approve, createRequest, issuePO, receive, reject, submitForApproval, saveReceipt, releasePayment } from "./actions";
 
 export const dynamic = "force-dynamic";
 const STATUS: Record<string, [string, string]> = {
   QUOTING: ["Getting quotes", "t-mut"], PENDING: ["Waiting for approval", "t-warn"], APPROVED: ["Approved", "t-acc"],
-  ORDERED: ["Ordered", "t-acc"], RECEIVED: ["Received", "t-ok"], REJECTED: ["Rejected", "t-bad"],
+  ORDERED: ["Ordered", "t-acc"], RECEIVED: ["Received, to pay", "t-warn"], PAID: ["Paid", "t-ok"], REJECTED: ["Rejected", "t-bad"],
 };
 const CATS = ["Lighting", "Electrical", "Plumbing", "Aircon", "Pump", "Elevator", "Safety", "Cleaning", "Civil", "Office", "Other"];
 type SP = { tab?: string; pr?: string; new?: string; item?: string; cat?: string; error?: string; ok?: string };
@@ -112,7 +112,7 @@ function Detail({ pr, u }: { pr: Full; u: SessionUser }) {
       {pr.status === "APPROVED" && staff && <form action={issuePO} style={{ marginTop: 10 }}><input type="hidden" name="pr" value={pr.number} /><SubmitButton label={`Issue purchase order to ${chosen?.vendor ?? "vendor"}`} busy="Issuing…" /></form>}
       {pr.poNumber && <div style={{ marginTop: 10 }}><b>{pr.poNumber}</b> <span className="hint">issued {pr.orderedAt ? fmtDate(pr.orderedAt) : ""}</span></div>}
       {pr.status === "ORDERED" && (rc.ok ? <ReceiveForm pr={pr} /> : <div className="hint" style={{ marginTop: 6 }}>Receiving: {rc.why}</div>)}
-      {pr.status === "RECEIVED" && (
+      {(pr.status === "RECEIVED" || pr.status === "PAID") && (
         <div className="received">
           <div><b>Received {pr.receivedQty} of {pr.qty}</b> by {pr.receivedBy} on {pr.receivedAt ? fmtDateTime(pr.receivedAt) : ""}{pr.invoiceTotal ? ` · invoice ${peso(Number(pr.invoiceTotal))}` : ""}</div>
           {pr.invoiceTotal && Number(pr.invoiceTotal) > amount * 1.02 && <div className="err">Invoice is {peso(Number(pr.invoiceTotal) - amount)} above the PO. Pay the PO amount only.</div>}
@@ -121,8 +121,26 @@ function Detail({ pr, u }: { pr: Full; u: SessionUser }) {
           {pr.receivedPic && <img src={pr.receivedPic} alt="Delivery photo" className="recv-pic" />}
         </div>
       )}
+      {(pr.status === "RECEIVED" || pr.status === "PAID") && <PayStep pr={pr} u={u} amount={amount} />}
     </div>
   );
+}
+
+/** No receipt, no payment: receipt photo within 24h of delivery, then someone other than the requester releases payment. */
+function PayStep({ pr, u, amount }: { pr: Full; u: SessionUser; amount: number }) {
+  const staff = u.role === "MANAGER" || u.role === "ADMIN";
+  if (pr.status === "PAID") return (
+    <div className="received"><div><b>Paid {peso(Number(pr.invoiceTotal ?? amount))}</b> by {pr.paidBy} on {pr.paidAt ? fmtDateTime(pr.paidAt) : ""} · ref {pr.paidRef}</div>
+      {pr.receiptPic && <img src={pr.receiptPic} alt="Official receipt" className="recv-pic" />}</div>);
+  return (
+    <div className="recv-form"><b>Pay the vendor</b>
+      <div className="hint">No receipt, no payment. The receipt photo is due within 24 hours of delivery{pr.workOrder ? `, and WO-${pr.workOrder} must be verified first` : ""}.</div>
+      {pr.receiptPic ? <div className="wo-proof"><img src={pr.receiptPic} alt="Official receipt" /><div className="hint">Receipt {peso(Number(pr.invoiceTotal))} on file.</div></div>
+        : staff && <form action={saveReceipt} className="stack" style={{ marginTop: 8 }}><input type="hidden" name="pr" value={pr.number} />
+          <div className="row"><PhotoField name="receipt" label="Photo of official receipt" required /><input name="invoice" inputMode="decimal" placeholder="Amount on receipt ₱" aria-label="Amount on receipt" defaultValue={pr.invoiceTotal ? String(pr.invoiceTotal) : ""} style={{ maxWidth: 170 }} /><SubmitButton label="Save receipt" small /></div></form>}
+      {pr.receiptPic && staff && (pr.requestedBy === u.id ? <div className="hint" style={{ marginTop: 6 }}>Someone other than you ({pr.requester}) must release the payment.</div> :
+        <form action={releasePayment} className="inline-form" style={{ marginTop: 8 }}><input type="hidden" name="pr" value={pr.number} /><input name="ref" placeholder="Check no. or bank ref" aria-label="Check number or bank reference" required /><SubmitButton label="Release payment" small /></form>)}
+    </div>);
 }
 
 function ReceiveForm({ pr }: { pr: Full }) {
@@ -155,7 +173,7 @@ async function ToReceive({ u }: { u: SessionUser }) {
 
 async function Requests() {
   const list = await prisma.purchaseRequest.findMany({ include: { quotes: true }, orderBy: { createdAt: "desc" }, take: 60 });
-  const order = ["PENDING", "QUOTING", "APPROVED", "ORDERED", "RECEIVED", "REJECTED"];
+  const order = ["PENDING", "QUOTING", "APPROVED", "ORDERED", "RECEIVED", "PAID", "REJECTED"];
   const groups = order.map((s) => ({ s, list: list.filter((p) => p.status === s) })).filter((g) => g.list.length);
   return (
     <div className="stack">
@@ -210,7 +228,7 @@ async function Controls({ u }: { u: SessionUser }) {
   const [flags, saved, waiting, spendRows, low] = await Promise.all([
     controlFlags(), savingsThisYear(),
     prisma.purchaseRequest.findMany({ where: { status: "PENDING" }, include: { quotes: true }, orderBy: { createdAt: "asc" } }),
-    prisma.purchaseRequest.findMany({ where: { status: { in: ["APPROVED", "ORDERED", "RECEIVED"] }, createdAt: { gte: since } }, include: { quotes: true } }),
+    prisma.purchaseRequest.findMany({ where: { status: { in: ["APPROVED", "ORDERED", "RECEIVED", "PAID"] }, createdAt: { gte: since } }, include: { quotes: true } }),
     prisma.stockItem.findMany({ where: {} }),
   ]);
   const mine = waiting.filter((p) => canApprove(p, u).ok);

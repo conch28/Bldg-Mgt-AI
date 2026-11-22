@@ -3,6 +3,9 @@ import { runAutomations } from "@/lib/comms";
 import { captureError, pruneErrors } from "@/lib/monitor";
 import { pruneRateLimits } from "@/lib/ratelimit";
 import { pruneCodes } from "@/lib/otp";
+import { runDutyNudges } from "@/lib/duties";
+import { runDataChecks } from "@/lib/datachecks";
+import { runIntegrity } from "@/lib/integrity";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -13,8 +16,11 @@ export async function GET(req: Request) {
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return new NextResponse("Unauthorized", { status: 401 });
   try {
     const result = await runAutomations();
+    const duties = await runDutyNudges(); // overdue records: remind the owner, then the supervisor, then the board
+    const data = await runDataChecks(); // data quality: open/close issues, tell owners about new P0/P1
+    const integrity = await runIntegrity(); // weekly random spot checks + flags for reused photos, copied notes, batched entries
     const [codes, limits, errors] = await Promise.all([pruneCodes(), pruneRateLimits(), pruneErrors()]); // retention limits from the privacy notice
-    return NextResponse.json({ ...result, pruned: { codes: codes.count, limits: limits.count, errors: errors.count } });
+    return NextResponse.json({ ...result, duties, data, integrity, pruned: { codes: codes.count, limits: limits.count, errors: errors.count } });
   } catch (e) {
     await captureError(e, { source: "cron", path: "/api/cron" });
     return NextResponse.json({ error: "automation failed" }, { status: 500 });

@@ -7,7 +7,7 @@ import { fmtDate } from "@/lib/format";
 import { uploadDocument, deleteDocument } from "./actions";
 
 export const dynamic = "force-dynamic";
-const CATS = ["Governance", "Financial", "Minutes", "Contracts", "Notices", "Forms"];
+const CATS = ["Governance", "Financial", "Minutes", "Contracts", "Notices", "Forms", "Plans", "Manuals", "Compliance", "Safety"];
 const kb = (n: number) => (n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB");
 
 export default async function Documents({ searchParams }: { searchParams: { c?: string; q?: string; ok?: string; error?: string } }) {

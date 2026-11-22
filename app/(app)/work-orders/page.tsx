@@ -6,7 +6,9 @@ import SlaTimer from "@/components/SlaTimer";
 import SubmitButton from "@/components/SubmitButton";
 import { slaStats } from "@/lib/metrics";
 import { fmtDateTime } from "@/lib/format";
-import { updateWorkOrder, createWorkOrder } from "./actions";
+import { updateWorkOrder, createWorkOrder, closeWithPhoto, verifyWorkOrder, makeJobLink } from "./actions";
+import PhotoField from "@/components/PhotoField";
+import { headers } from "next/headers";
 import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -14,11 +16,14 @@ const FILTERS: Record<string, Prisma.WorkOrderWhereInput> = { open: { status: { 
 const STRIPE = { HIGH: "var(--bad)", MEDIUM: "var(--warn)", LOW: "var(--line)" };
 const TECHS = ["Rudy M.", "Jun P.", "Vendor: LiftCare", "Vendor: AccessPro", "CleanPro", "Property manager"];
 
-export default async function WorkOrders({ searchParams }: { searchParams: { f?: string } }) {
+export default async function WorkOrders({ searchParams }: { searchParams: { f?: string; wo?: string; ok?: string; error?: string } }) {
   const u = await requireRole("BOARD", "MANAGER", "ADMIN");
-  const f = searchParams.f && FILTERS[searchParams.f] ? searchParams.f : "open";
+  const one = Number(searchParams.wo) || 0;
+  const f = one ? "one" : searchParams.f && FILTERS[searchParams.f] ? searchParams.f : "open";
+  const h = headers(); const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("x-forwarded-host") ?? h.get("host")}`;
+  const backTo = one ? `/work-orders?wo=${one}` : `/work-orders?f=${f}`;
   const [list, open, sla] = await Promise.all([
-    prisma.workOrder.findMany({ where: FILTERS[f], orderBy: [{ createdAt: "desc" }], take: f === "done" ? 50 : 200, include: { events: { orderBy: { createdAt: "desc" }, take: 1 } } }),
+    prisma.workOrder.findMany({ where: one ? { number: one } : FILTERS[f], orderBy: [{ createdAt: "desc" }], take: f === "done" ? 50 : 200, include: { events: { orderBy: { createdAt: "desc" }, take: 1 } } }),
     prisma.workOrder.count({ where: FILTERS.open }), slaStats(30),
   ]);
   const canEdit = u.role !== "BOARD";
@@ -32,8 +37,10 @@ export default async function WorkOrders({ searchParams }: { searchParams: { f?:
           <Kpi k="Owner rating" v={`${sla.rating.toFixed(1)} / 5`} d={<span className="hint">{sla.ratedCount} ratings</span>} />
           <div className="hide-m" style={{ display: "contents" }}><Kpi k="Deadlines" v="4h · 24h · 72h" d={<span className="hint">high · medium · low priority</span>} /></div>
         </div>
+        {searchParams.ok && <div className="okmsg">{searchParams.ok}</div>}
+        {searchParams.error && <div className="err">{searchParams.error}</div>}
         <div className="card">
-          <div className="cardhead"><div><h3>Tickets</h3><div className="hint">{canEdit ? "Change status or assignee and press Save. Every change is logged." : "Read-only for board members."}</div></div>
+          <div className="cardhead"><div><h3>{one ? `WO-${one}` : "Tickets"}</h3><div className="hint">{canEdit ? "Assign a person, send the job link. The technician closes it with an after photo; you verify within 24h." : "Read-only for board members."}</div></div>
             <div className="r">{Object.keys(FILTERS).map((k) => <Link key={k} href={`?f=${k}`} className={"chip" + (k === f ? " on" : "")}>{k[0].toUpperCase() + k.slice(1)}</Link>)}</div></div>
           <div className="tablewrap"><table className="stack-m">
             <thead><tr><th>Ticket</th><th>Location</th><th>Issue</th><th>Priority</th><th>Source</th><th>Status / assignee</th><th className="r">SLA</th></tr></thead>
@@ -48,8 +55,10 @@ export default async function WorkOrders({ searchParams }: { searchParams: { f?:
                     <input type="hidden" name="id" value={w.id} />
                     <select name="status" defaultValue={w.status} aria-label="Status">{["NEW", "ASSIGNED", "IN_PROGRESS", "ESCALATED", "DONE"].map((s) => <option key={s} value={s}>{s.replace("_", " ").toLowerCase()}</option>)}</select>
                     <input name="assignee" list="techs" defaultValue={w.assignee ?? ""} placeholder="Assign to" aria-label="Assignee" style={{ width: 120 }} />
+                    <input type="hidden" name="back" value={backTo} />
                     <SubmitButton label="Save" small cls="btn" />
                   </form>) : <><StatusTag s={w.status} /> <span className="hint">{w.assignee}</span></>}
+                  <Proof w={w} canEdit={canEdit} origin={origin} backTo={backTo} />
                 </td>
                 <td className="r">{w.status === "DONE" && w.closedAt ? <span className="tag t-ok">Closed in {Math.round((w.closedAt.getTime() - w.createdAt.getTime()) / 36e5 * 10) / 10}h</span> : <SlaTimer deadline={w.createdAt.getTime() + w.slaHours * 3600000} />}</td>
               </tr>))}
@@ -65,9 +74,41 @@ export default async function WorkOrders({ searchParams }: { searchParams: { f?:
             <select name="priority" defaultValue="MEDIUM" aria-label="Priority"><option value="HIGH">High (4h)</option><option value="MEDIUM">Medium (24h)</option><option value="LOW">Low (72h)</option></select>
             <input name="assignee" list="techs" placeholder="Assign to" aria-label="Assign to" style={{ width: 130 }} />
             <select name="source" aria-label="Source"><option>Walk-in</option><option>Phone</option><option>Inspection</option><option>Guard report</option></select>
+            <input type="hidden" name="back" value="/work-orders" />
             <SubmitButton label="Open ticket" small />
           </form></div>}
       </main>
     </>
   );
+}
+
+type WO = Awaited<ReturnType<typeof prisma.workOrder.findMany>>[number];
+/** Completion proof, the job link for the technician, and the manager's verify step. */
+function Proof({ w, canEdit, origin, backTo }: { w: WO; canEdit: boolean; origin: string; backTo: string }) {
+  const hid = <><input type="hidden" name="id" value={w.id} /><input type="hidden" name="back" value={backTo} /></>;
+  if (w.status === "DONE") return (
+    <div className="wo-proof">
+      {w.donePhoto ? <a href={w.donePhoto} target="_blank" rel="noreferrer"><img src={w.donePhoto} alt={`After photo for WO-${w.number}`} /></a> : <span className="tag t-warn">No after photo</span>}
+      <div className="hint" style={{ flex: 1, minWidth: 140 }}>{w.doneBy ? <>Done by <b>{w.doneBy}</b>. </> : null}{w.doneNote}
+        {w.verifiedAt ? <div><span className="tag t-ok">Verified by {w.verifiedBy}</span></div> : null}</div>
+      {!w.verifiedAt && canEdit && <div className="row">
+        <form action={verifyWorkOrder}>{hid}<SubmitButton label="Verify" small /></form>
+        <details><summary className="btn sm">Send back</summary><form action={verifyWorkOrder} className="inline-form" style={{ marginTop: 6 }}>{hid}<input type="hidden" name="decision" value="reject" /><input name="note" placeholder="What still needs fixing?" aria-label="What still needs fixing" required /><SubmitButton label="Send back" small cls="btn" /></form></details>
+      </div>}
+    </div>);
+  if (!canEdit) return null;
+  const link = w.jobToken ? `${origin}/j/${w.jobToken}` : "";
+  const msg = `Skyland job WO-${w.number}: ${w.title} at ${w.location}. Open, tap I'm on it, then Done with a photo: ${link}`;
+  return (
+    <div className="wo-proof">
+      {w.assignee && (link ? <><a className="btn sm" href={`sms:?&body=${encodeURIComponent(msg)}`}>Text job link</a><a className="btn sm" href={`viber://forward?text=${encodeURIComponent(msg)}`}>Viber</a><a className="hint" href={link} target="_blank" rel="noreferrer">Open link</a></>
+        : <form action={makeJobLink}>{hid}<SubmitButton label="Create job link" small cls="btn" /></form>)}
+      <details><summary className="btn sm">Close with photo</summary>
+        <form action={closeWithPhoto} className="stack" style={{ marginTop: 6 }}>{hid}
+          <PhotoField label="After photo" required />
+          <input name="doneBy" defaultValue={w.assignee ?? ""} placeholder="Who did the work?" aria-label="Who did the work" />
+          <input name="note" placeholder="What was done (optional)" aria-label="What was done" maxLength={600} />
+          <SubmitButton label="Mark done" small />
+        </form></details>
+    </div>);
 }

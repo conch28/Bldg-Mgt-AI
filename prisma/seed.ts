@@ -10,6 +10,9 @@ import { seedV2 } from "./seed-v2";
 import { seedV3 } from "./seed-v3";
 import { seedV4 } from "./seed-v4";
 import { seedV5 } from "./seed-v5";
+import { seedV6 } from "./seed-v6";
+import { seedV7 } from "./seed-v7";
+import { seedV8 } from "./seed-v8";
 import { SITE, allUnits } from "../lib/skyland";
 
 const prisma = new PrismaClient();
@@ -57,12 +60,14 @@ async function main() {
     throw new Error("Refusing to seed a production database. Set SEED_ALLOW_PRODUCTION=1 to override.");
   }
   // Demo deploys re-seed only when the sample data is missing or from an older version of the app.
-  const SEED_VERSION = "skyland-demo-v10";
+  const SEED_VERSION = "skyland-demo-v13";
   if (process.env.SEED_IF_EMPTY === "1" && (await prisma.building.count()) > 0) {
     const current = await prisma.auditLog.findFirst({ where: { action: "seed", detail: { contains: SEED_VERSION } } });
     if (current) { await ensureViewers(); console.log("Demo data is up to date. Skipping the seed."); return; }
     console.log("Demo data is from an older version. Re-seeding…");
   }
+  // Real people's accounts (anything not @skyland.test, e.g. the founders' admin logins) survive a re-seed.
+  const keep = await prisma.user.findMany({ where: { NOT: { email: { endsWith: "@skyland.test" } }, role: { not: "OWNER" } } });
   console.log("Clearing data…");
   await prisma.$transaction([
     prisma.inquiry.deleteMany(), prisma.listing.deleteMany(), prisma.marketComp.deleteMany(), prisma.lease.deleteMany(), prisma.moveRequest.deleteMany(),
@@ -79,11 +84,17 @@ async function main() {
     prisma.actionItem.deleteMany(), prisma.proxy.deleteMany(), prisma.attendance.deleteMany(), prisma.meeting.deleteMany(),
     prisma.stormCheckin.deleteMany(), prisma.stormEvent.deleteMany(), prisma.postLike.deleteMany(), prisma.post.deleteMany(), prisma.eventRsvp.deleteMany(), prisma.event.deleteMany(),
     prisma.unit.deleteMany(),
-    prisma.privacyRequest.deleteMany(), prisma.loginCode.deleteMany(), prisma.errorLog.deleteMany(), prisma.rateLimit.deleteMany(),
+    prisma.dataIssue.deleteMany(), prisma.readinessSignoff.deleteMany(), prisma.complianceItem.deleteMany(), prisma.vendorCredential.deleteMany(),
+    prisma.spotAudit.deleteMany(), prisma.entryFlag.deleteMany(),
+    prisma.dutyNudge.deleteMany(), prisma.privacyRequest.deleteMany(), prisma.loginCode.deleteMany(), prisma.errorLog.deleteMany(), prisma.rateLimit.deleteMany(),
     prisma.user.deleteMany(), prisma.building.deleteMany(),
   ]);
 
   const building = await prisma.building.create({ data: { name: SITE.name, city: SITE.city, duesRate: DUES_RATE } });
+  for (const k of keep) {
+    await prisma.user.create({ data: { email: k.email, name: k.name, phone: k.phone, passwordHash: k.passwordHash, role: k.role, active: k.active, language: k.language, consentAt: k.consentAt, buildingId: building.id } });
+    console.log(`Kept account ${k.email}`);
+  }
 
   const password = process.env.SEED_PASSWORD ?? "Skyland2026!";
   const hash = await bcrypt.hash(password, 10);
@@ -246,6 +257,9 @@ async function main() {
   }
 
   await seedV5({ prisma, rnd, owner, manager, president, treasurer, NOW });
+  await seedV6({ prisma, rnd, manager, admin, NOW });
+  await seedV7({ prisma, manager, admin, president, buildingId: building.id, NOW });
+  await seedV8({ prisma, rnd, manager, admin, NOW });
   await ensureViewers();
 
   await prisma.auditLog.create({ data: { userId: admin.id, action: "seed", detail: `Database seeded with Skyland sample data (${SEED_VERSION})` } });
