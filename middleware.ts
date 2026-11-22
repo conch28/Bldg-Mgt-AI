@@ -6,6 +6,8 @@ const RULES: [RegExp, string[]][] = [
   [/^\/(board|scorecard|happiness)/, ["BOARD", "MANAGER", "ADMIN"]],
   [/^\/(work-orders|collections|comms|maintenance|vendors|reports)/, ["BOARD", "MANAGER", "ADMIN"]],
   [/^\/today/, ["MANAGER", "ADMIN"]],
+  [/^\/data\/assets\/(?!(qr|import)$)[^/]+$/, ["BOARD", "MANAGER", "ADMIN", "GUARD"]], // asset QR pages: guards scan to report faults
+  [/^\/data(\/|$)/, ["BOARD", "MANAGER", "ADMIN"]],
   [/^\/tasks(\/|$)/, ["MANAGER", "ADMIN", "GUARD", "BOARD"]],
   [/^\/duties(\/|$)/, ["BOARD", "MANAGER", "ADMIN"]],
   [/^\/(energy|meetings|equipment|channels)(\/|$)/, ["BOARD", "MANAGER", "ADMIN"]],
