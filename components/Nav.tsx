@@ -55,7 +55,7 @@ export default function Nav({ items, tabs, user, building }: { items: NavItem[];
         {list}
         <div className="userbox" style={{ marginTop: "auto" }}>
           <ThemeSwitch />
-          <span><b>{user.name}</b><br />{user.role.toLowerCase()} · <Link href="/account" style={{ color: "inherit" }}>Account</Link></span>
+          <span><b>{user.name}</b><br />{user.role === "LANDLORD" ? "building owner" : user.role.toLowerCase()} · <Link href="/account" style={{ color: "inherit" }}>Account</Link></span>
           <button className="signout" onClick={() => signOut({ callbackUrl: "/login" })}>Sign out</button>
         </div>
       </aside>

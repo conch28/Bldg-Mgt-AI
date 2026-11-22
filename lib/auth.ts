@@ -23,7 +23,7 @@ export const authOptions: NextAuthOptions = {
         const email = creds?.email?.toLowerCase().trim();
         if (!email || !creds?.password) return null;
         const ip = clientIp(req?.headers as any);
-        const [a, b] = await Promise.all([rateLimit(`pw:${email}`, 8, 900), rateLimit(`pw-ip:${ip}`, demoMode() ? 200 : 30, 900)]);
+        const [a, b] = await Promise.all([rateLimit(`pw:${email}`, demoMode() ? 60 : 8, 900), rateLimit(`pw-ip:${ip}`, demoMode() ? 200 : 30, 900)]);
         if (!a.ok || !b.ok) throw new Error("RATE_LIMIT");
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user || !user.active) return null;
@@ -83,7 +83,13 @@ export async function requireRole(...roles: Role[]): Promise<SessionUser> {
   return u;
 }
 
-export const homeFor = (role: Role) => (role === "OWNER" ? "/home" : role === "BOARD" ? "/board" : role === "GUARD" ? "/frontdesk" : "/today");
+/** Read-only demo viewers. They see one summary page each and can't change anything. */
+export const VIEWERS: Role[] = ["INVESTOR", "LANDLORD"];
+/** Everyone who uses the building day to day (all roles except the read-only viewers). */
+export const PEOPLE: Role[] = ["OWNER", "BOARD", "MANAGER", "ADMIN", "GUARD"];
+
+export const homeFor = (role: Role) =>
+  role === "OWNER" ? "/home" : role === "BOARD" ? "/board" : role === "GUARD" ? "/frontdesk" : role === "INVESTOR" ? "/investor" : role === "LANDLORD" ? "/building-owner" : "/today";
 
 export async function audit(userId: string | null, action: string, detail?: string) {
   await prisma.auditLog.create({ data: { userId, action, detail } });

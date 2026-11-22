@@ -42,6 +42,19 @@ function dayIn(period: string, day: number) {
 }
 const METHODS = ["GCash","GCash","GCash","Maya","Bank transfer","Card","Cash"];
 
+/** Read-only demo logins (investor, building owner). Added without a re-seed so live accounts are kept. */
+async function ensureViewers() {
+  const building = await prisma.building.findFirst({ orderBy: { createdAt: "asc" } });
+  if (!building) return;
+  const hash = await bcrypt.hash(process.env.SEED_PASSWORD ?? "Skyland2026!", 10);
+  const viewers: [string, string, Role][] = [["investor@skyland.test", "Demo Investor", "INVESTOR"], ["building@skyland.test", "Building Owner", "LANDLORD"]];
+  for (const [email, name, role] of viewers) {
+    if (await prisma.user.findUnique({ where: { email } })) continue;
+    await prisma.user.create({ data: { email, name, role, passwordHash: hash, buildingId: building.id } });
+    console.log(`Added demo login ${email}`);
+  }
+}
+
 async function main() {
   if (process.env.NODE_ENV === "production" && process.env.SEED_ALLOW_PRODUCTION !== "1") {
     throw new Error("Refusing to seed a production database. Set SEED_ALLOW_PRODUCTION=1 to override.");
@@ -50,9 +63,11 @@ async function main() {
   const SEED_VERSION = "skyland-demo-v13";
   if (process.env.SEED_IF_EMPTY === "1" && (await prisma.building.count()) > 0) {
     const current = await prisma.auditLog.findFirst({ where: { action: "seed", detail: { contains: SEED_VERSION } } });
-    if (current) { console.log("Demo data is up to date. Skipping the seed."); return; }
+    if (current) { await ensureViewers(); console.log("Demo data is up to date. Skipping the seed."); return; }
     console.log("Demo data is from an older version. Re-seeding…");
   }
+  // Real people's accounts (anything not @skyland.test, e.g. the founders' admin logins) survive a re-seed.
+  const keep = await prisma.user.findMany({ where: { NOT: { email: { endsWith: "@skyland.test" } }, role: { not: "OWNER" } } });
   console.log("Clearing data…");
   await prisma.$transaction([
     prisma.inquiry.deleteMany(), prisma.listing.deleteMany(), prisma.marketComp.deleteMany(), prisma.lease.deleteMany(), prisma.moveRequest.deleteMany(),
@@ -76,6 +91,10 @@ async function main() {
   ]);
 
   const building = await prisma.building.create({ data: { name: SITE.name, city: SITE.city, duesRate: DUES_RATE } });
+  for (const k of keep) {
+    await prisma.user.create({ data: { email: k.email, name: k.name, phone: k.phone, passwordHash: k.passwordHash, role: k.role, active: k.active, language: k.language, consentAt: k.consentAt, buildingId: building.id } });
+    console.log(`Kept account ${k.email}`);
+  }
 
   const password = process.env.SEED_PASSWORD ?? "Skyland2026!";
   const hash = await bcrypt.hash(password, 10);
@@ -241,10 +260,11 @@ async function main() {
   await seedV6({ prisma, rnd, manager, admin, NOW });
   await seedV7({ prisma, manager, admin, president, buildingId: building.id, NOW });
   await seedV8({ prisma, rnd, manager, admin, NOW });
+  await ensureViewers();
 
   await prisma.auditLog.create({ data: { userId: admin.id, action: "seed", detail: `Database seeded with Skyland sample data (${SEED_VERSION})` } });
   console.log(`Done. ${units.length} units, ${bills.length} bills, ${payments.length} payments.`);
-  console.log(`Logins (password: ${password}): admin@ manager@ president@ treasurer@ owner@ guard@ guard2@ skyland.test`);
+  console.log(`Logins (password: ${password}): admin@ manager@ president@ treasurer@ owner@ guard@ guard2@ building@ investor@ skyland.test`);
   void manager; void president; void treasurer;
 }
 

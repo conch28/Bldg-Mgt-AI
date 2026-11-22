@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireRole } from "@/lib/auth";
+import { requireRole, PEOPLE } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHead } from "@/components/ui";
 import SubmitButton from "@/components/SubmitButton";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 const CATS = ["Furniture", "Appliances", "Kids", "Food", "Services", "Free", "Other"];
 
 export default async function Community({ searchParams }: { searchParams: { tab?: string; error?: string } }) {
-  const u = await requireRole();
+  const u = await requireRole(...PEOPLE);
   const owner = u.role === "OWNER", staff = !owner && u.role !== "BOARD";
   const tab = searchParams.tab === "lost" || u.role === "GUARD" && searchParams.tab !== "market" ? "lost" : "market";
   const [items, lf] = await Promise.all([
