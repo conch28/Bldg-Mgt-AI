@@ -6,6 +6,7 @@ import {
   cityDay, districtTotals, liveOf, manilaClock, paybackMonths, pesoYr, ranked,
   DATA_COSTS, DATA_SCALE, PIPELINE, SOURCES, healthOf, type Health,
 } from "@/lib/clark";
+import { Ticker } from "@/components/city/Present";
 
 const n0 = (v: number) => Math.round(v).toLocaleString("en-PH");
 const n1 = (v: number) => (Math.round(v * 10) / 10).toLocaleString("en-PH");
@@ -101,6 +102,8 @@ export default function ClarkCommand({ now0, briefing, aiWritten }: { now0: numb
           <div><b className="num">{alerts.length}</b><span>open alerts · {peso(alerts.reduce((s, a) => s + a.costDay, 0))}/day at stake</span></div>
           <div><b className="num">{tot.comfort.toFixed(1)}/5</b><span>comfort score from {n0(tot.people)} people</span></div>
         </div>
+        <div className="cc-live-save"><span className="cc-ls-k">AI savings so far today · live</span><Ticker perDay={(MONTHS[MONTHS.length - 1]?.peso ?? 0) / 30} className="cc-ls-v" /><span className="cc-ls-n">sample, at last month&apos;s verified rate</span></div>
+        <a className="cc-3d cc-present" href="/green/map?present=1"><span aria-hidden="true">🎬</span><span><b>Present the 3D story</b><small>One tap, 75 seconds, narrated: power and water flowing live, a leak caught at 2 AM, before and after AI, 30 days of savings</small></span><span aria-hidden="true">→</span></a>
         <a className="cc-3d" href={mapHref(dist ?? "all")}><span aria-hidden="true">🌐</span><span><b>Open the 3D city</b><small>Fly over every building from New Clark City to Clark Freeport{dist ? `, starting at ${dName}` : ""}</small></span><span aria-hidden="true">→</span></a>
         <div className="g-disc">Illustrative sample data for a demo. Building names are generic and no real tenant&apos;s usage is shown. Rates assumed: ₱{ASSUMPTIONS.tariff}/kWh, ₱{ASSUMPTIONS.water}/m³.</div>
       </section>

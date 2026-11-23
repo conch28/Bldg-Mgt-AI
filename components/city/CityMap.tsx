@@ -9,6 +9,9 @@ import {
 } from "@/lib/nccCity";
 import { solarShape } from "@/lib/green";
 import { RankPanel, MonthBars, computeRanking, RANK_DEFAULT, type RankOpts } from "./Rankings";
+import { chapters, say, hush, Ticker, LeakHud, BeforeHud, ReplayHud, EndCard, DataHud, type Chapter } from "./Present";
+import Help, { type HelpTab } from "./Help";
+import { useRouter } from "next/navigation";
 
 type Mode = "districts" | "energy" | "water" | "rank" | "solar" | "carbon" | "alerts";
 const MODES: { k: Mode; label: string; icon: string; hint: string }[] = [
@@ -48,7 +51,12 @@ const LOOKS: { k: Look; icon: string; label: string; title: string }[] = [
 ];
 const LOOK_KEY = "bmai-citymap-look";
 
-export default function CityMap({ focus, alert: alertParam, googleKey }: { focus?: string; alert?: string; googleKey?: string }) {
+/** Share of power (and water) a building saves with the AI running: 4% to 30%, about 13% on average (sample). */
+const saveFrac = (seed: number, salt: number) => { const u = ((Math.imul(seed ^ salt, 2654435761) >>> 0) % 10007) / 10007; return 0.04 + 0.26 * u * u; };
+const MUTE_KEY = "bmai-citymap-mute";
+type Flow = "power" | "water" | null;
+
+export default function CityMap({ focus, alert: alertParam, googleKey, present: presentParam }: { focus?: string; alert?: string; googleKey?: string; present?: "auto" | "manual" }) {
   const host = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<CityScene | null>(null);
   const threeRef = useRef<typeof THREE | null>(null);
@@ -62,7 +70,17 @@ export default function CityMap({ focus, alert: alertParam, googleKey }: { focus
   const [full, setFull] = useState(false);
   const [stats, setStats] = useState({ buildings: 0, roadKm: 0, pvKwp: 0, chunks: 0 });
   const [, bump] = useState(0);
-  const metrics = useRef<M>({ kind: [], kwh: new Float32Array(), m3: new Float32Array(), roof: new Float32Array(), solar: new Float32Array(), floor: new Float32Array(), seed: new Int32Array() });
+  const metrics = useRef<M>({ kind: [], kwh: new Float32Array(), m3: new Float32Array(), roof: new Float32Array(), solar: new Float32Array(), floor: new Float32Array(), seed: new Int32Array(), save: new Float32Array(), wsave: new Float32Array() });
+  const [aiOn, setAiOn] = useState(true);
+  // presenter mode
+  const [pres, setPres] = useState<{ i: number; run: number } | null>(null);
+  const [presFlow, setPresFlow] = useState<Flow>(null);
+  const [presPulse, setPresPulse] = useState(false);
+  const [hudOn, setHudOn] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [askStart, setAskStart] = useState(!!presentParam);
+  const [help, setHelp] = useState<HelpTab | null>(null);
+  const router = useRouter();
   const [rk, setRk] = useState<RankOpts>(RANK_DEFAULT);
   const [look, setLook] = useState<Look>(googleKey ? "google" : "satellite");
   const [lookNote, setLookNote] = useState("");
@@ -116,13 +134,14 @@ export default function CityMap({ focus, alert: alertParam, googleKey }: { focus
   function computeMetrics() {
     const sc = sceneRef.current; if (!sc) return;
     const B = sc.buildings, N = B.length;
-    const m: M = { kind: [] as Kind[], kwh: new Float32Array(N), m3: new Float32Array(N), roof: new Float32Array(N), solar: new Float32Array(N), floor: new Float32Array(N), seed: new Int32Array(N) };
+    const m: M = { kind: [] as Kind[], kwh: new Float32Array(N), m3: new Float32Array(N), roof: new Float32Array(N), solar: new Float32Array(N), floor: new Float32Array(N), seed: new Int32Array(N), save: new Float32Array(N), wsave: new Float32Array(N) };
     B.forEach((b, i) => {
       const k = KINDS[b.kind] ?? "home"; m.kind.push(k);
       const did = distIds.current[b.dist];
       const named = did != null && (NCC_DISTRICTS.has(did) || CLARK_DISTRICTS.has(did));
       m.seed[i] = seedAt(b.x, b.z); // by position, so phones (which skip tiny sheds) get the same numbers
       const s = sampleMetrics(m.seed[i], b.concept && k === "utility" && b.h < 3 ? "utility" : k, b.foot, b.h, named);
+      m.save[i] = b.concept ? 0.12 : saveFrac(m.seed[i], 0x9e3779b9); m.wsave[i] = b.concept ? 0.1 : saveFrac(m.seed[i], 0x85ebca6b);
       m.kwh[i] = s.kwhDay; m.m3[i] = s.m3Day; m.roof[i] = s.roofKwp; m.solar[i] = b.concept && b.h < 3 ? 12000 : s.solarKwp; m.floor[i] = s.floor;
     });
     metrics.current = m;
@@ -173,10 +192,10 @@ export default function CityMap({ focus, alert: alertParam, googleKey }: { focus
         if (b.concept) out.set(KIND_COLOR[k === "utility" ? "utility" : k]).lerp(base.set("#00c2b2"), 0.35);
         out.offsetHSL(0, 0, (j - 0.5) * 0.08);
       } else if (mode === "energy") {
-        const w = (kwAt({ floor: m.floor[i], kwhDay: m.kwh[i], m3Day: 0, roofKwp: 0, solarKwp: 0 }, k, h) * 1000) / Math.max(1, m.floor[i]);
+        const w = (kwAt({ floor: m.floor[i], kwhDay: m.kwh[i], m3Day: 0, roofKwp: 0, solarKwp: 0 }, k, h) * 1000 * (aiOn ? 1 - m.save[i] : 1)) / Math.max(1, m.floor[i]);
         ramp(R_ENERGY, Math.log(1 + w) / Math.log(1 + (k === "datahall" ? 2000 : 45)), out, T.Color);
       } else if (mode === "water") {
-        ramp(R_WATER, Math.log(1 + (m.m3[i] * 1000) / Math.max(1, m.floor[i])) / Math.log(1 + 12), out, T.Color);
+        ramp(R_WATER, Math.log(1 + (m.m3[i] * 1000 * (aiOn ? 1 - m.wsave[i] : 1)) / Math.max(1, m.floor[i])) / Math.log(1 + 12), out, T.Color);
       } else if (mode === "rank") {
         const v = rank ? rank.score[i] : NaN;
         if (Number.isNaN(v)) out.set(b.concept ? "#9a958c" : "#b9b4aa").offsetHSL(0, 0, (j - 0.5) * 0.05);
@@ -193,9 +212,9 @@ export default function CityMap({ focus, alert: alertParam, googleKey }: { focus
         out.set(did && alertDist.has(did) ? "#c9c3b5" : "#8f8a80").offsetHSL(0, 0, (j - 0.5) * 0.05);
       }
     });
-  }, [mode, hour, rank, rk]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mode, hour, rank, rk, aiOn]); // eslint-disable-line react-hooks/exhaustive-deps
   // repaint when the mode changes, and in energy mode on each new hour
-  const paintKey = mode === "energy" ? `${mode}:${Math.floor(hour)}` : mode === "rank" ? `rank:${JSON.stringify(rk)}` : mode;
+  const paintKey = mode === "energy" ? `${mode}:${Math.floor(hour)}:${aiOn}` : mode === "water" ? `water:${aiOn}` : mode === "rank" ? `rank:${JSON.stringify(rk)}` : mode;
   useEffect(() => { paint(); }, [paintKey, stats.chunks]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ----- time -----
@@ -207,6 +226,12 @@ export default function CityMap({ focus, alert: alertParam, googleKey }: { focus
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [play]);
+
+  // ----- flows and pulsing heat -----
+  const flow: Flow = pres ? presFlow : mode === "energy" ? "power" : mode === "water" ? "water" : null;
+  const pulse = pres ? presPulse : mode === "energy" && !aiOn;
+  useEffect(() => { sceneRef.current?.setFlow(flow); }, [flow, stats.chunks]);
+  useEffect(() => { sceneRef.current?.setPulse(pulse); }, [pulse, stats.chunks]);
 
   // ----- labels, outlines, beacons -----
   const flyToDistrict = useCallback((id: string) => {
@@ -239,7 +264,7 @@ export default function CityMap({ focus, alert: alertParam, googleKey }: { focus
 
   useEffect(() => { sceneRef.current?.select(sel?.type === "b" ? sel.i : null); }, [sel]);
   useEffect(() => { sceneRef.current?.setWheelFree(full); }, [full]);
-  useEffect(() => { if (!full) return; const k = (e: KeyboardEvent) => { if (e.key === "Escape") setFull(false); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [full]);
+  useEffect(() => { if (!full || pres) return; const k = (e: KeyboardEvent) => { if (e.key === "Escape") setFull(false); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [full, !!pres]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // deep links: ?focus=<district> or ?alert=<id>, once the right chunk is in
   const deep = useRef(false);
@@ -268,33 +293,130 @@ export default function CityMap({ focus, alert: alertParam, googleKey }: { focus
   // ----- live totals (sample) -----
   const totals = useMemo(() => {
     const m = metrics.current; const N = m.kind.length; if (!N) return null;
-    let kw = 0, roofKw = 0, m3 = 0, co2 = 0, kwh = 0;
+    let kwBase = 0, kwAi = 0, roofKw = 0, m3 = 0, m3Ai = 0, co2 = 0, kwhSaved = 0, m3Saved = 0;
     for (let i = 0; i < N; i++) {
-      kw += kwAt({ floor: m.floor[i], kwhDay: m.kwh[i], m3Day: 0, roofKwp: 0, solarKwp: 0 }, m.kind[i], hour);
+      const k = kwAt({ floor: m.floor[i], kwhDay: m.kwh[i], m3Day: 0, roofKwp: 0, solarKwp: 0 }, m.kind[i], hour);
+      kwBase += k; kwAi += k * (1 - m.save[i]);
       roofKw += solarAt(m.solar[i], hour);
-      m3 += m.m3[i]; kwh += m.kwh[i];
-      co2 += Math.max(0, m.kwh[i] - m.solar[i] * 3.8);
+      m3 += m.m3[i]; m3Ai += m.m3[i] * (1 - m.wsave[i]);
+      kwhSaved += m.kwh[i] * m.save[i]; m3Saved += m.m3[i] * m.wsave[i];
+      co2 += Math.max(0, m.kwh[i] * (aiOn ? 1 - m.save[i] : 1) - m.solar[i] * 3.8);
     }
     const farmKw = stats.pvKwp * solarShape(hour) * 0.82;
-    const bill = kwh * TARIFF + m3 * 55;
-    return { kw, roofKw, farmKw, m3, co2: (co2 * EF) / 1000, aiSave: bill * 0.11 };
-  }, [Math.floor(hour * 4), stats.chunks]); // eslint-disable-line react-hooks/exhaustive-deps
+    const day = { peso: kwhSaved * TARIFF + m3Saved * 55, kwh: kwhSaved, m3: m3Saved, co2: (kwhSaved * EF) / 1000 };
+    return { kw: aiOn ? kwAi : kwBase, kwBase, kwAi, roofKw, farmKw, m3: aiOn ? m3Ai : m3, co2: (co2 * EF) / 1000, aiSave: day.peso, day };
+  }, [Math.floor(hour * 4), stats.chunks, aiOn]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ----- presenter mode -----
+  const steps = useMemo<Chapter[]>(() => chapters({ buildings: stats.buildings, day: totals?.day ?? { peso: 0, kwh: 0, m3: 0, co2: 0 }, leak: ALERTS.find((a) => a.id === "aqua") }), [stats.buildings, totals?.day.peso]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { try { setMuted(localStorage.getItem(MUTE_KEY) === "1"); } catch { /* ignore */ } }, []);
+  const at = useCallback((id: string) => districts.find((d) => d.id === id)?.c ?? [0, 0], [districts]);
+  function startPresent() {
+    const sc = sceneRef.current; if (!sc || stats.chunks < 2) return;
+    sc.stopTour(); setCaption(null); touring.current = true; setSel(null); setAskStart(false);
+    if (googleKey) setLook("google");
+    setFull(true);
+    document.documentElement.requestFullscreen?.().catch(() => { /* not allowed: the in-page full screen still works */ });
+    setPres({ i: 0, run: Date.now() });
+  }
+  function endPresent(explore = false) {
+    hush(); setPres(null); touring.current = false; setHudOn(false); setAiOn(true);
+    sceneRef.current?.setOrbit(0);
+    if (explore) { setMode("districts"); setPlay(true); }
+    setFull(false);
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+  }
+  const go = (d: number) => setPres((p) => (p ? { i: Math.max(0, Math.min(steps.length - 1, p.i + d)), run: Date.now() } : p));
+  // run the current chapter
+  useEffect(() => {
+    const sc = sceneRef.current; if (!pres || !sc) return;
+    const c = steps[pres.i]; const timers: ReturnType<typeof setTimeout>[] = []; let iv: ReturnType<typeof setInterval> | undefined;
+    const later = (s: number, f: () => void) => timers.push(setTimeout(f, s * 1000));
+    setPlay(false); setHudOn(false); sc.setOrbit(0);
+    if (!muted) later(0.6, () => say(c.say)); else hush();
+    if (c.id === "intro") {
+      setMode("districts"); setAiOn(true); setPresFlow(null); setPresPulse(false); setHour(17.2);
+      sc.intro(8); later(7.6, () => sc.scan()); later(8, () => sc.setOrbit(0.025));
+    } else if (c.id === "power") {
+      setMode("energy"); setAiOn(false); setPresFlow("power"); setPresPulse(true); setHour(18.4);
+      const [x, z] = at("ngac"); sc.flyTo(x, z, 5200, undefined, 4.5, 0.5); later(4.6, () => sc.setOrbit(0.035));
+    } else if (c.id === "water") {
+      setMode("water"); setAiOn(false); setPresFlow("water"); setPresPulse(false); setHour(6.8);
+      const [x, z] = at("village"); sc.flyTo(x + 400, z - 300, 3000, undefined, 4, 0.45); later(4.1, () => sc.setOrbit(-0.04));
+    } else if (c.id === "leak") {
+      const a = ALERTS.find((x) => x.id === "aqua")!; const [x, z] = toLocal(a.lon, a.lat);
+      setMode("alerts"); setAiOn(true); setPresFlow("water"); setPresPulse(false); setHour(2.2);
+      sc.flyTo(x, z, 1900, undefined, 3, 0.55); later(1, () => sc.scan("#ff4d4d"));
+      later(3.2, () => { sc.flyTo(x, z, 340, undefined, 3.2, 0.36); setHudOn(true); });
+      later(6.5, () => sc.setOrbit(0.09));
+    } else if (c.id === "data") {
+      setMode("energy"); setAiOn(true); setPresFlow("power"); setPresPulse(false); setHour(10.5); setHudOn(true);
+      const [x, z] = at("mimosa"); sc.flyTo(x, z, 4200, undefined, 4.5, 0.5); later(4.6, () => sc.setOrbit(0.03));
+      [1.5, 4.5, 7.5, 10.5].forEach((t) => later(t, () => sc.scan()));
+    } else if (c.id === "before") {
+      setMode("energy"); setAiOn(false); setPresFlow("power"); setPresPulse(true); setHour(18.6); setHudOn(true);
+      const [x, z] = at("ngac"); sc.flyTo(x - 600, z + 900, 7000, undefined, 4, 0.52); later(4.1, () => sc.setOrbit(0.03));
+      later(5.5, () => { setAiOn(true); setPresPulse(false); });
+    } else if (c.id === "replay") {
+      setMode("energy"); setAiOn(true); setPresFlow("power"); setPresPulse(false); setHudOn(true);
+      sc.reset(); later(2.5, () => sc.setOrbit(0.025));
+      let h = 16.8; setHour(h); iv = setInterval(() => { h = Math.min(20.6, h + 0.04); setHour(h); }, 100);
+    } else {
+      setMode("districts"); setAiOn(true); setPresFlow(null); setPresPulse(false); setHour(19.6); setHudOn(true);
+      sc.flyTo(1200, 9000, 30000, 60, 5, 0.55); later(5, () => sc.setOrbit(0.02));
+    }
+    if (c.dur && presentParam !== "manual") later(c.dur, () => go(1));
+    return () => { timers.forEach(clearTimeout); if (iv) clearInterval(iv); };
+  }, [pres?.i, pres?.run]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!pres) return;
+    const k = (e: KeyboardEvent) => { if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); go(1); } else if (e.key === "ArrowLeft") go(-1); else if (e.key === "Escape") endPresent(); };
+    window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
+  }, [!!pres]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => hush(), []);
+  const toggleMute = () => { const m = !muted; setMuted(m); if (m) hush(); try { localStorage.setItem(MUTE_KEY, m ? "1" : "0"); } catch { /* ignore */ } };
+  const chap = pres ? steps[pres.i] : null;
 
   const night = hour < 6 || hour >= 18.3;
   const modeInfo = MODES.find((x) => x.k === mode)!;
 
+  const modesRow = (
+    <div className={"cm-modes" + (full ? " cm-modes-in" : "")} role="tablist" aria-label="Map layer">
+      {MODES.map((x) => <button key={x.k} role="tab" aria-selected={mode === x.k} title={x.hint} className={"chip" + (mode === x.k ? " on" : "")} onClick={() => setMode(x.k)}>{x.icon} {x.label}</button>)}
+      <button className="chip cm-q" onClick={() => setHelp("layers")} aria-label="What do these layers mean?">?</button>
+    </div>
+  );
+  const showTips = () => { setHelp(null); setFull(false); router.replace("/green/map?tips=1", { scroll: false }); };
+
   return (
     <div className="citymap">
-      <div className="cm-modes" role="tablist" aria-label="Map layer">
-        {MODES.map((x) => <button key={x.k} role="tab" aria-selected={mode === x.k} className={"chip" + (mode === x.k ? " on" : "")} onClick={() => setMode(x.k)}>{x.icon} {x.label}</button>)}
-      </div>
-      <div className={"cm-wrap" + (full ? " cm-full" : "")}>
+      {!full && modesRow}
+      <div className={"cm-wrap" + (full ? " cm-full" : "") + (pres ? " cm-pres" : "")}>
         <div className="cm-stage" ref={host} aria-label="3D map of New Clark City and Clark Freeport">
           {load.pct < 100 && !load.err && <div className="cm-load"><div className="cm-spin" /><b>{load.step}…</b><div className="cm-bar"><i style={{ width: `${load.pct}%` }} /></div><small>Real map data: about 3.5 MB on first visit</small></div>}
           {load.err && <div className="cm-load"><b>{load.err}</b></div>}
           <div className="cm-top">
-            <div className="cm-title"><b>New Clark City → Clark</b><span className="demo-tag">Real map · sample data</span></div>
-            <div className="cm-tools">
+            <div className="cm-title"><b>New Clark City → Clark</b><span className="demo-tag">Real map · sample data</span>
+              {!pres && <Fresh onClick={() => setHelp("data")} />}
+              {full && !pres && modesRow}
+              {full && !pres && <div className="cm-inhint">{modeInfo.hint}</div>}
+              {!pres && (mode === "energy" || mode === "water") && (
+                <div className="cm-aisw" role="radiogroup" aria-label="Before and after AI">
+                  <button role="radio" aria-checked={!aiOn} className={!aiOn ? "on off" : ""} onClick={() => setAiOn(false)}>Without AI</button>
+                  <button role="radio" aria-checked={aiOn} className={aiOn ? "on" : ""} onClick={() => setAiOn(true)}>🤖 With AI</button>
+                </div>
+              )}
+            </div>
+            {pres ? (
+              <div className="cm-tools">
+                <button className="cm-btn" onClick={() => go(-1)} disabled={pres.i === 0} aria-label="Previous chapter">‹</button>
+                <button className="cm-btn" onClick={() => go(1)} disabled={pres.i >= steps.length - 1} aria-label="Next chapter">›</button>
+                <button className="cm-btn" onClick={toggleMute} aria-label={muted ? "Turn narration on" : "Mute narration"}>{muted ? "🔇" : "🔊"}</button>
+                <button className="cm-btn" onClick={() => endPresent()}>✕ End</button>
+              </div>
+            ) : <div className="cm-tools">
+              <button className="cm-btn cm-cta" onClick={startPresent} disabled={stats.chunks < 2} title="One-tap narrated story for client pitches">🎬<span className="cm-lk-t"> Present</span></button>
+              <button className="cm-btn" onClick={() => setHelp(help ? null : "layers")} aria-label="How to use this map" title="How to use this map">?</button>
               <div className="cm-looks" role="radiogroup" aria-label="Map look">
                 {LOOKS.filter((l) => l.k !== "google" || googleKey).map((l) => <button key={l.k} role="radio" aria-checked={look === l.k} title={l.title} aria-label={l.label} className={"cm-btn" + (look === l.k ? " on" : "")} onClick={() => chooseLook(l.k)}>{l.icon}<span className="cm-lk-t"> {l.label}</span></button>)}
               </div>
@@ -303,8 +425,29 @@ export default function CityMap({ focus, alert: alertParam, googleKey }: { focus
               <button className="cm-btn" onClick={() => sceneRef.current?.zoom(0.7)} aria-label="Zoom in">＋</button>
               <button className="cm-btn" onClick={() => sceneRef.current?.zoom(1.4)} aria-label="Zoom out">－</button>
               <button className="cm-btn" onClick={() => setFull((f) => !f)} aria-label={full ? "Exit full screen" : "Full screen"}>{full ? "✕" : "⛶"}</button>
-            </div>
+            </div>}
           </div>
+          {help && !pres && <Help initial={help} onClose={() => setHelp(null)} onPresent={() => { setHelp(null); startPresent(); }} onTips={showTips} />}
+          {askStart && !pres && load.pct >= 100 && (
+            <div className="cm-start"><button className="cm-btn cm-cta" onClick={startPresent} disabled={stats.chunks < 2}>🎬 Start the 3D story</button><small>{presentParam === "manual" ? "Manual mode: press → or tap › for the next chapter." : "About 90 seconds, with narration. Press → to skip ahead, Esc to stop."}</small></div>
+          )}
+          {pres && chap && totals && <>
+            {chap.id !== "end" && (
+              <div className="cm-lower" key={pres.i + ":" + pres.run}>
+                <small className="cm-kick">{String(pres.i + 1).padStart(2, "0")} / {String(steps.length).padStart(2, "0")} · {chap.kicker}</small>
+                <h3>{chap.title}</h3>
+                <p>{chap.text}</p>
+                <div className="cm-prog"><i style={{ animationDuration: `${chap.dur}s` }} /></div>
+              </div>
+            )}
+            {chap.id === "leak" && <LeakHud a={ALERTS.find((a) => a.id === "aqua")!} show={hudOn} />}
+            {chap.id === "data" && hudOn && <DataHud />}
+            {chap.id === "before" && hudOn && <BeforeHud aiOn={aiOn} kwBase={totals.kwBase} kwAi={totals.kwAi} perDay={totals.day.peso} />}
+            {chap.id === "replay" && hudOn && <ReplayHud key={pres.run} day={totals.day} dur={chap.dur} />}
+            {chap.id === "end" && hudOn && <EndCard c={chap} day={totals.day} onReplay={() => setPres({ i: 0, run: Date.now() })} onExplore={() => endPresent(true)} />}
+            {chap.id !== "end" && <Ticker perDay={totals.day.peso} className="cm-tick" label="AI savings today · sample" />}
+            <div className="cm-dots" aria-hidden="true">{steps.map((c, k) => <i key={c.id} className={k === pres.i ? "on" : k < pres.i ? "done" : ""} />)}</div>
+          </>}
           {caption && <div className="cm-caption"><small>{caption.i + 1} / {caption.n}</small><b>{caption.title}</b><span>{caption.text}</span></div>}
           <div className="cm-legend"><Legend mode={mode} rk={rk} /></div>
           {lookNote && <div className="cm-note" role="status">{lookNote}</div>}
@@ -320,11 +463,11 @@ export default function CityMap({ focus, alert: alertParam, googleKey }: { focus
 
       {totals && (
         <div className="cm-kpis">
-          <div><b>{mw(totals.kw)}</b><span>power use now, all buildings</span></div>
+          <div><b>{mw(totals.kw)}</b><span>power use now, all buildings{aiOn ? ", with AI" : ", without AI"}</span></div>
           <div><b>{mw(totals.roofKw + totals.farmKw)}</b><span>solar now: rooftops + mapped solar farms</span></div>
           <div><b>{n0(totals.m3)} m³</b><span>water today</span></div>
           <div><b>{n0(totals.co2)} t</b><span>CO₂ today from grid power</span></div>
-          <div><b>{peso(totals.aiSave)}</b><span>AI savings today (≈11% of power + water bill)</span></div>
+          <div className="cm-kpi-live"><Ticker perDay={totals.aiSave} /><span>AI savings so far today, live (sample: {peso(totals.aiSave)} a day)</span></div>
           <div><b>{ALERTS.length}</b><span>alerts the AI is handling</span></div>
         </div>
       )}
@@ -364,12 +507,13 @@ function Legend({ mode, rk }: { mode: Mode; rk: RankOpts }) {
     : <><span className="cm-ramp" style={{ background: `linear-gradient(90deg,${R_CHANGE.join(",")})` }} /><span>Cut 25% → rose 25%</span><span><i style={{ background: "#b9b4aa" }} />Not metered</span></>;
   if (mode === "districts") return <>{(["civic", "apartment", "retail", "hotel", "industrial", "transport", "sports", "school", "datahall"] as Kind[]).map((k) => <span key={k}><i style={{ background: KIND_COLOR[k] }} />{KIND_LABEL[k].replace(" (concept)", "")}</span>)}<span><i style={{ background: "#d6d0c2" }} />Houses</span></>;
   if (mode === "alerts") return <>{(Object.keys(ALERT_COLOR) as (keyof typeof ALERT_COLOR)[]).map((k) => <span key={k}><i style={{ background: ALERT_COLOR[k] }} />{k[0].toUpperCase() + k.slice(1)}</span>)}</>;
+  const flowNote = mode === "energy" ? <span><i className="cm-flowdot" style={{ background: "#ffb347" }} />Power flowing along main roads (illustrative)</span> : mode === "water" ? <span><i className="cm-flowdot" style={{ background: "#3fb6ff" }} />Water flowing (illustrative routes)</span> : null;
   const r = mode === "energy" ? R_ENERGY : mode === "water" ? R_WATER : mode === "carbon" ? R_CARBON : R_SOLAR;
   const [lo, hi] = mode === "energy" ? ["Low", "High per m²"] : mode === "water" ? ["Low", "High per m²"] : mode === "carbon" ? ["Low", "High CO₂/yr"] : ["Small roof", "Big roof"];
-  return <><span className="cm-ramp" style={{ background: `linear-gradient(90deg,${r.join(",")})` }} /><span>{lo} → {hi}</span>{mode === "solar" && <span><i style={{ background: "#ffd60a" }} />Has panels</span>}</>;
+  return <><span className="cm-ramp" style={{ background: `linear-gradient(90deg,${r.join(",")})` }} /><span>{lo} → {hi}</span>{mode === "solar" && <span><i style={{ background: "#ffd60a" }} />Has panels</span>}{flowNote}</>;
 }
 
-type M = { kind: Kind[]; kwh: Float32Array; m3: Float32Array; roof: Float32Array; solar: Float32Array; floor: Float32Array; seed: Int32Array };
+type M = { kind: Kind[]; kwh: Float32Array; m3: Float32Array; roof: Float32Array; solar: Float32Array; floor: Float32Array; seed: Int32Array; save: Float32Array; wsave: Float32Array };
 const TIPS: Partial<Record<Kind, string>> = {
   home: "Friendly Taglish tips and Green Points nudge households to use aircon smarter at night.",
   apartment: "AI finds running toilets from night water flow and messages the unit owner.",
@@ -465,4 +609,11 @@ function Intro({ stats, onDistrict, districts }: { stats: { buildings: number; r
       </div>
     </div>
   );
+}
+
+/** "Live" data badge: sample, shows minutes since the last 15-minute reading. */
+function Fresh({ onClick }: { onClick: () => void }) {
+  const [m, setM] = useState(0);
+  useEffect(() => { const f = () => setM(Math.floor((Date.now() / 60000) % 15)); f(); const t = setInterval(f, 20000); return () => clearInterval(t); }, []);
+  return <button className="cm-fresh" onClick={onClick} title="Where the data comes from"><i />Live demo · readings every 15 min · last {m === 0 ? "just now" : `${m} min ago`} <u>how?</u></button>;
 }

@@ -26,7 +26,7 @@ export type CityScene = {
   setLabels(l: Label[]): void;
   setBeacons(b: Beacon[]): void;
   setOutlines(list: { p: number[]; color: string; dashed?: boolean; strong?: boolean }[]): void;
-  flyTo(x: number, z: number, dist?: number, y?: number): void;
+  flyTo(x: number, z: number, dist?: number, y?: number, dur?: number, pitch?: number): void;
   tour(stops: Stop[], onStop: (i: number) => void, onEnd: () => void): void;
   stopTour(): void;
   reset(): void;
@@ -35,6 +35,16 @@ export type CityScene = {
   heightAt(x: number, z: number): number;
   setLook(look: Look, google?: { key: string; onError: (msg: string) => void }): void;
   attributions(): string;
+  /** Glowing particles streaming along the main roads: power (amber/cyan) or water (blue). Illustrative routes. */
+  setFlow(kind: "power" | "water" | null): void;
+  /** Hot (red) buildings breathe with a soft glow. */
+  setPulse(on: boolean): void;
+  /** Cinematic descent from high above down to the home view. */
+  intro(dur?: number): void;
+  /** Slow orbit around the current target, radians per second (0 stops). */
+  setOrbit(speed: number): void;
+  /** An "AI scanning" ring that sweeps out across the city from the view centre. */
+  scan(color?: string): void;
   dispose(): void;
 };
 
@@ -87,8 +97,9 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
   };
   renderer.domElement.addEventListener("wheel", onWheel, { passive: false });
   let tourState: null | { stops: Stop[]; i: number; t: number; from: { p: THREE.Vector3; l: THREE.Vector3 }; onStop: (i: number) => void; onEnd: () => void } = null;
+  let orbit = 0;
   let flight: null | { t: number; dur: number; fromP: THREE.Vector3; fromL: THREE.Vector3; toP: THREE.Vector3; toL: THREE.Vector3; arc: number } = null;
-  controls.addEventListener("start", () => { flight = null; if (tourState) { const e = tourState.onEnd; tourState = null; e(); } });
+  controls.addEventListener("start", () => { flight = null; orbit = 0; if (tourState) { const e = tourState.onEnd; tourState = null; e(); } });
 
   // ---------- lights & sky ----------
   const hemi = new THREE.HemisphereLight(0xdfefff, 0x6b7a55, 1.0);
@@ -101,7 +112,7 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
   scene.add(stars);
 
   // shared uniforms for building shaders
-  const U = { uNight: { value: 0 }, uGlow: { value: 0 }, uWin: { value: 1 } };
+  const U = { uNight: { value: 0 }, uGlow: { value: 0 }, uWin: { value: 1 }, uPulse: { value: 0 }, uTime: { value: 0 } };
   function patch(m: THREE.Material) {
     m.onBeforeCompile = (s) => {
       Object.assign(s.uniforms, U);
@@ -112,7 +123,7 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
           wp4 = instanceMatrix * wp4; nn = mat3(instanceMatrix) * nn;
         #endif
         wp4 = modelMatrix * wp4; vWP = wp4.xyz; vNW = normalize(mat3(modelMatrix) * nn);`);
-      s.fragmentShader = "uniform float uNight;\nuniform float uGlow;\nuniform float uWin;\nvarying vec3 vWP;\nvarying vec3 vNW;\nfloat hh(vec2 p){return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5453);}\n" +
+      s.fragmentShader = "uniform float uNight;\nuniform float uGlow;\nuniform float uWin;\nuniform float uPulse;\nuniform float uTime;\nvarying vec3 vWP;\nvarying vec3 vNW;\nfloat hh(vec2 p){return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5453);}\n" +
         s.fragmentShader.replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
         if (abs(vNW.y) < 0.5 && uNight > 0.01) {
           float fy = vWP.y / 3.3; float fx = (vWP.x + vWP.z) / 3.1;
@@ -120,7 +131,11 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
           float lit = step(0.42, hh(vec2(floor(fy), floor(fx / 3.0)) + floor(vWP.xz / 40.0)));
           totalEmissiveRadiance += vec3(1.0, 0.76, 0.42) * win * lit * uNight * uWin * 1.1;
         }
-        totalEmissiveRadiance += diffuseColor.rgb * uGlow;`);
+        totalEmissiveRadiance += diffuseColor.rgb * uGlow;
+        if (uPulse > 0.01) {
+          float hot = clamp((diffuseColor.r - diffuseColor.b) * 1.8 - 0.25, 0.0, 1.0);
+          totalEmissiveRadiance += diffuseColor.rgb * uPulse * hot * (0.45 + 0.45 * sin(uTime * 3.4 + (vWP.x + vWP.z) * 0.003));
+        }`);
     };
     m.customProgramCacheKey = () => "cityPatch";
   }
@@ -233,7 +248,7 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
     (plain.material as THREE.MeshLambertMaterial).color.set(look === "map" ? "#9fb07f" : "#6f7652");
     plain.visible = !g;
     if (google) google.group.visible = g;
-    carPts.visible = !g;
+    carPts.visible = !g && !flowKind;
     // On Google 3D our boxes would hide the real buildings: show them only as a see-through data layer.
     for (const m of [boxMat, polyMat]) { m.transparent = g; m.opacity = g ? 0.62 : 1; m.depthWrite = !g; m.needsUpdate = true; }
     for (const o of pickables) o.visible = !g || dataMode;
@@ -467,6 +482,79 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
     pos.needsUpdate = true;
   }
 
+  // ---------- flows (power / water streaming along the main roads) ----------
+  let flowKind: "power" | "water" | null = null;
+  let flowParts: { p: number; s: number; v: number; dir: number }[] = [];
+  const flowGeo = new THREE.BufferGeometry();
+  const flowMat = new THREE.PointsMaterial({ size: 26, map: dot, vertexColors: true, transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, sizeAttenuation: true, fog: false });
+  const flowPts = new THREE.Points(flowGeo, flowMat); flowPts.frustumCulled = false; flowPts.renderOrder = 5; flowPts.visible = false; scene.add(flowPts);
+  let pipes: THREE.LineSegments | null = null;
+  function buildPipes() {
+    const v: number[] = [];
+    for (const p of paths) for (let k = 2; k < p.pts.length; k += 2) {
+      const ax = p.pts[k - 2], az = p.pts[k - 1], bx = p.pts[k], bz = p.pts[k + 1];
+      v.push(ax, heightAt(ax, az) + 5, az, bx, heightAt(bx, bz) + 5, bz);
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(v, 3));
+    pipes = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: "#ffb347", transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, fog: false }));
+    pipes.renderOrder = 4; pipes.frustumCulled = false; scene.add(pipes);
+  }
+  function setFlow(kind: "power" | "water" | null) {
+    flowKind = kind;
+    if (kind && paths.length) {
+      if (!pipes) buildPipes();
+      const total = paths.reduce((s, p) => s + p.len, 0);
+      const N = mobile ? 1100 : 3200;
+      if (flowParts.length !== N) {
+        flowParts = [];
+        for (const [pi, p] of paths.entries()) {
+          const n = Math.round((p.len / total) * N); for (let k = 0; k < n; k++) flowParts.push({ p: pi, s: Math.random() * p.len, v: 160 + Math.random() * 140, dir: Math.random() < 0.5 ? 1 : -1 });
+        }
+        flowGeo.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(flowParts.length * 3), 3));
+        flowGeo.setAttribute("color", new THREE.Float32BufferAttribute(new Float32Array(flowParts.length * 3), 3));
+      }
+      const col = flowGeo.attributes.color as THREE.BufferAttribute;
+      const cs = kind === "power" ? ["#ffb347", "#ffd27a", "#4fe3ff", "#ff8a3d"] : ["#3fb6ff", "#7fd8ff", "#1e90ff", "#b5ecff"];
+      flowParts.forEach((_, i) => { tmpC.set(cs[i % cs.length]); col.setXYZ(i, tmpC.r, tmpC.g, tmpC.b); });
+      col.needsUpdate = true;
+      (pipes!.material as THREE.LineBasicMaterial).color.set(kind === "power" ? "#ffb347" : "#3fb6ff");
+    }
+    flowPts.visible = !!kind; if (pipes) pipes.visible = !!kind;
+    carPts.visible = !kind && !(look === "google" && google != null);
+  }
+  function moveFlows(dt: number, camD: number) {
+    if (!flowKind) return;
+    const pos = flowGeo.attributes.position as THREE.BufferAttribute | undefined; if (!pos) return;
+    flowMat.size = THREE.MathUtils.clamp(camD / 120, 10, 90);
+    for (let i = 0; i < flowParts.length; i++) {
+      const c = flowParts[i], p = paths[c.p];
+      c.s += c.v * dt * c.dir;
+      if (c.s > p.len) c.s -= p.len; if (c.s < 0) c.s += p.len;
+      let k = 1; while (k < p.cum.length - 1 && p.cum[k] < c.s) k++;
+      const seg = p.cum[k] - p.cum[k - 1] || 1, t = (c.s - p.cum[k - 1]) / seg;
+      const x = p.pts[(k - 1) * 2] + (p.pts[k * 2] - p.pts[(k - 1) * 2]) * t, z = p.pts[(k - 1) * 2 + 1] + (p.pts[k * 2 + 1] - p.pts[(k - 1) * 2 + 1]) * t;
+      pos.setXYZ(i, x, heightAt(x, z) + 7, z);
+    }
+    pos.needsUpdate = true;
+  }
+
+  // ---------- AI scan sweep ----------
+  const scanGeo = new THREE.RingGeometry(0.985, 1, 160).rotateX(-Math.PI / 2);
+  const scans: { m: THREE.Mesh; t: number }[] = [];
+  function scan(color = "#5ef0dc") {
+    const m = new THREE.Mesh(scanGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, side: THREE.DoubleSide, fog: false }));
+    m.position.set(controls.target.x, heightAt(controls.target.x, controls.target.z) + 30, controls.target.z); m.renderOrder = 6;
+    scene.add(m); scans.push({ m, t: 0 });
+  }
+  function moveScans(dt: number, camD: number) {
+    for (let i = scans.length - 1; i >= 0; i--) {
+      const s = scans[i]; s.t += dt / 3.6;
+      const r = 40 + Math.pow(s.t, 0.8) * Math.max(6000, camD * 2.2);
+      s.m.scale.set(r, 1, r); (s.m.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 1 - s.t);
+      if (s.t >= 1) { scene.remove(s.m); (s.m.material as THREE.Material).dispose(); scans.splice(i, 1); }
+    }
+  }
+
   // ---------- labels ----------
   let labels: { l: Label; el: HTMLDivElement }[] = [];
   function setLabels(list: Label[]) {
@@ -521,15 +609,23 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
 
   // ---------- camera moves ----------
   const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-  function startFlight(toP: THREE.Vector3, toL: THREE.Vector3, dur: number) {
+  function startFlight(toP: THREE.Vector3, toL: THREE.Vector3, dur: number, arc?: number) {
     const d = camera.position.distanceTo(toP);
-    flight = { t: 0, dur, fromP: camera.position.clone(), fromL: controls.target.clone(), toP, toL, arc: Math.min(d * 0.3, 4500) };
+    flight = { t: 0, dur, fromP: camera.position.clone(), fromL: controls.target.clone(), toP, toL, arc: arc ?? Math.min(d * 0.3, 4500) };
   }
-  function flyTo(x: number, z: number, dist = 900, y?: number) {
+  /** pitch: height/distance ratio of the camera (0.62 is the usual oblique view; lower is more drone-like). */
+  function flyTo(x: number, z: number, dist = 900, y?: number, dur = 2.2, pitch = 0.62) {
     const gy = y ?? heightAt(x, z);
     const dir = camera.position.clone().sub(controls.target).setY(0).normalize();
     if (!isFinite(dir.x) || dir.lengthSq() < 0.1) dir.set(0.5, 0, 0.85).normalize();
-    startFlight(new THREE.Vector3(x + dir.x * dist * 0.75, gy + dist * 0.62, z + dir.z * dist * 0.75), new THREE.Vector3(x, gy + 20, z), 2.2);
+    const hor = Math.sqrt(Math.max(0.05, 1 - pitch * pitch)) * dist;
+    startFlight(new THREE.Vector3(x + dir.x * hor, gy + dist * pitch, z + dir.z * hor), new THREE.Vector3(x, gy + 20, z), dur);
+  }
+  function intro(dur = 7.5) {
+    tourState = null;
+    camera.position.set(HOME.target.x + 9000, 60000, HOME.target.z + 26000);
+    controls.target.copy(HOME.target);
+    startFlight(HOME.pos.clone(), HOME.target.clone(), dur, 0);
   }
   function tour(stops: Stop[], onStop: (i: number) => void, onEnd: () => void) {
     tourState = { stops, i: -1, t: 0, from: { p: camera.position.clone(), l: controls.target.clone() }, onStop, onEnd };
@@ -599,6 +695,8 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
       camera.position.lerpVectors(flight.fromP, flight.toP, e); camera.position.y += Math.sin(Math.PI * e) * flight.arc;
       controls.target.lerpVectors(flight.fromL, flight.toL, e);
       if (t >= 1) { flight = null; if (tourState) tourState.t = 0; }
+    } else if (orbit && !tourState) {
+      const off = camera.position.clone().sub(controls.target); off.applyAxisAngle(yAxis, dtReal * orbit); camera.position.copy(controls.target).add(off);
     } else if (tourState) {
       tourState.t += dtReal;
       // drift slowly around the stop while the caption is read
@@ -607,12 +705,15 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
     }
     controls.target.x = THREE.MathUtils.clamp(controls.target.x, bound.x0, bound.x1);
     controls.target.z = THREE.MathUtils.clamp(controls.target.z, bound.z0, bound.z1);
+    controls.maxDistance = flight ? 1e6 : 42000;
     controls.update();
     // keep the camera above the hills
     const gy = heightAt(camera.position.x, camera.position.z) + 25;
     if (camera.position.y < gy) camera.position.y = gy;
     moveCars(dt);
     const camD = camera.position.distanceTo(controls.target);
+    moveFlows(dt, camD); moveScans(dtReal, camD);
+    U.uTime.value = now;
     beaconGroup.children.forEach((o) => {
       if (!o.userData.ring) return;
       const k = Math.max(1, camD / 3000);
@@ -631,6 +732,7 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
 
   return {
     buildings, addChunk, addConcept, paint, setHour, setDataMode, select, setLabels, setBeacons, setOutlines, flyTo, tour, stopTour, reset, zoom, heightAt, setLook,
+    setFlow, intro, scan, setPulse(on) { U.uPulse.value = on ? 1 : 0; }, setOrbit(sp) { orbit = sp; },
     attributions() { return google && look === "google" ? google.attributions() : ""; },
     setWheelFree(f) { wheelFree = f; },
     dispose() {

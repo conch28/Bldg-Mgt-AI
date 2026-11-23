@@ -56,6 +56,15 @@ export const CARDS: Record<string, Card[]> = {
 };
 
 export const TIPS: Record<string, Step[]> = {
+  "/green/map": [
+    { s: ".cm-modes", t: "Pick a layer", b: "Buildings shows each building's type. Energy now and Water colour every building by use, with glowing flows. Rankings lists the biggest users and biggest savers. Solar, Carbon and Alerts do what they say." },
+    { s: ".cm-tools .cm-cta", t: "Present", b: "One tap starts a 90-second narrated story for clients, in full screen. Press → to skip ahead, Esc to stop." },
+    { s: ".cm-looks", t: "Map look", b: "Google 3D shows real photo buildings. Satellite and Map are free fallbacks." },
+    { s: ".cm-fresh", t: "Where the data comes from", b: "Tap to see how meters, photos and bills reach the map every 15 minutes, and how the data is checked." },
+    { s: ".cm-time", t: "Time of day", b: "Play the day or drag to an hour. Energy changes with the hour: offices by day, homes at night." },
+    { s: ".cm-kpis", t: "Live totals", b: "Power, solar, water, CO₂ and a live counter of AI savings so far today. All sample numbers on a real map." },
+    { s: ".cm-alerts", t: "What the AI caught", b: "Tap an alert to fly to it and read what the AI did about it." },
+  ],
   "/home": [
     { s: ".status-card", t: "Your dues at a glance", b: "How much is due and when. Tap Pay now to settle and get your receipt." },
     { s: 'a.act[href="/report"]', t: "Report a problem", b: "Snap a photo and the AI fills in the rest. You'll get updates until it's fixed." },
