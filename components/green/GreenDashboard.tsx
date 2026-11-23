@@ -43,6 +43,7 @@ export default function GreenDashboard({ siteKey, briefing, aiWritten, canSwitch
         </div>
         <h2>{site.name}<small> · {site.place}</small></h2>
         <p>{site.tagline}</p>
+        <a className="g-maplink" href={site.key === "pax" ? "/green/map?focus=pax" : "/green/map"}>🏙️ Open the 3D city map: New Clark City to Clark →</a>
         <div className="g-hero-stats">
           <div><b className="num">{pShort(savedDay)}</b><span>saved today on power and water</span></div>
           <div><b className="num">−{costPct}%</b><span>power and water bill vs before AI ({gridPct}% less grid power)</span></div>
