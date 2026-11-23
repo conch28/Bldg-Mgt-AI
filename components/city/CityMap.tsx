@@ -1,18 +1,21 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type * as THREE from "three";
-import type { CityScene } from "./cityScene";
+import type { CityScene, Look } from "./cityScene";
 import {
   KINDS, KIND_LABEL, KIND_COLOR, DISTRICTS, STATUS_WORD, ALERTS, ALERT_COLOR, ALERT_ICON, toLocal, paxConcept, tourStops, sampleMetrics, kwAt, solarAt,
-  EF, TARIFF, PV_KWP_PER_M2, FOCUS_ALIAS, type Kind, type ChunkData, type TerrainFile, type DistrictShape, type CityAlert,
+  EF, TARIFF, PV_KWP_PER_M2, FOCUS_ALIAS, seedAt, monthlyHistory, sumRange, monthName, HIST_MONTHS,
+  type Kind, type ChunkData, type TerrainFile, type DistrictShape, type CityAlert,
 } from "@/lib/nccCity";
 import { solarShape } from "@/lib/green";
+import { RankPanel, MonthBars, computeRanking, RANK_DEFAULT, type RankOpts } from "./Rankings";
 
-type Mode = "districts" | "energy" | "water" | "solar" | "carbon" | "alerts";
+type Mode = "districts" | "energy" | "water" | "rank" | "solar" | "carbon" | "alerts";
 const MODES: { k: Mode; label: string; icon: string; hint: string }[] = [
   { k: "districts", label: "Buildings", icon: "🏙️", hint: "Every building by type. Tap one, or a district name, for details." },
   { k: "energy", label: "Energy now", icon: "⚡", hint: "Power use per square metre of floor at this hour. Watch homes light up at night and offices by day." },
   { k: "water", label: "Water", icon: "💧", hint: "Water use per square metre of floor per day." },
+  { k: "rank", label: "Rankings", icon: "📊", hint: "Who uses the most electricity and water, and who cut the most. Pick the period below, then tap a building to fly there." },
   { k: "solar", label: "Solar", icon: "☀️", hint: "Bright yellow roofs already have panels (sample). Orange shows untapped rooftop potential." },
   { k: "carbon", label: "Carbon", icon: "🌍", hint: "Tonnes of CO₂ a year from each building's grid power, after its own solar." },
   { k: "alerts", label: "Alerts", icon: "🚨", hint: "What the AI caught today. Tap an alert to fly there." },
@@ -35,8 +38,17 @@ const R_ENERGY = ["#1d4f91", "#2a9d8f", "#e9c46a", "#f4a261", "#e63946"];
 const R_WATER = ["#e3f1fb", "#9ecae1", "#4292c6", "#08519c", "#08306b"];
 const R_CARBON = ["#e8e8e8", "#f2c4a8", "#e07a5f", "#b8323d", "#6b0f1a"];
 const R_SOLAR = ["#e9e4d8", "#f6d49a", "#f4a261", "#e76f51"];
+const R_WATER_RANK = ["#c6dbef", "#6baed6", "#2171b5", "#08306b"];
+const R_CHANGE = ["#1a9850", "#91cf60", "#f2f2f2", "#fc8d59", "#d73027"];
 
-export default function CityMap({ focus, alert: alertParam }: { focus?: string; alert?: string }) {
+const LOOKS: { k: Look; icon: string; label: string; title: string }[] = [
+  { k: "google", icon: "🌐", label: "Google 3D", title: "Google photorealistic 3D buildings and terrain" },
+  { k: "satellite", icon: "🛰️", label: "Satellite", title: "Free cloud-free satellite photo (Copernicus Sentinel-2)" },
+  { k: "map", icon: "🗺️", label: "Map", title: "Drawn map: roads, land use, rivers" },
+];
+const LOOK_KEY = "bmai-citymap-look";
+
+export default function CityMap({ focus, alert: alertParam, googleKey }: { focus?: string; alert?: string; googleKey?: string }) {
   const host = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<CityScene | null>(null);
   const threeRef = useRef<typeof THREE | null>(null);
@@ -50,7 +62,11 @@ export default function CityMap({ focus, alert: alertParam }: { focus?: string; 
   const [full, setFull] = useState(false);
   const [stats, setStats] = useState({ buildings: 0, roadKm: 0, pvKwp: 0, chunks: 0 });
   const [, bump] = useState(0);
-  const metrics = useRef<{ kind: Kind[]; kwh: Float32Array; m3: Float32Array; roof: Float32Array; solar: Float32Array; floor: Float32Array }>({ kind: [], kwh: new Float32Array(), m3: new Float32Array(), roof: new Float32Array(), solar: new Float32Array(), floor: new Float32Array() });
+  const metrics = useRef<M>({ kind: [], kwh: new Float32Array(), m3: new Float32Array(), roof: new Float32Array(), solar: new Float32Array(), floor: new Float32Array(), seed: new Int32Array() });
+  const [rk, setRk] = useState<RankOpts>(RANK_DEFAULT);
+  const [look, setLook] = useState<Look>(googleKey ? "google" : "satellite");
+  const [lookNote, setLookNote] = useState("");
+  const [attr, setAttr] = useState("");
   const distIds = useRef<string[]>([]);
   const touring = useRef(false);
 
@@ -100,16 +116,44 @@ export default function CityMap({ focus, alert: alertParam }: { focus?: string; 
   function computeMetrics() {
     const sc = sceneRef.current; if (!sc) return;
     const B = sc.buildings, N = B.length;
-    const m = { kind: [] as Kind[], kwh: new Float32Array(N), m3: new Float32Array(N), roof: new Float32Array(N), solar: new Float32Array(N), floor: new Float32Array(N) };
+    const m: M = { kind: [] as Kind[], kwh: new Float32Array(N), m3: new Float32Array(N), roof: new Float32Array(N), solar: new Float32Array(N), floor: new Float32Array(N), seed: new Int32Array(N) };
     B.forEach((b, i) => {
       const k = KINDS[b.kind] ?? "home"; m.kind.push(k);
       const did = distIds.current[b.dist];
       const named = did != null && (NCC_DISTRICTS.has(did) || CLARK_DISTRICTS.has(did));
-      const s = sampleMetrics(i, b.concept && k === "utility" && b.h < 3 ? "utility" : k, b.foot, b.h, named);
+      m.seed[i] = seedAt(b.x, b.z); // by position, so phones (which skip tiny sheds) get the same numbers
+      const s = sampleMetrics(m.seed[i], b.concept && k === "utility" && b.h < 3 ? "utility" : k, b.foot, b.h, named);
       m.kwh[i] = s.kwhDay; m.m3[i] = s.m3Day; m.roof[i] = s.roofKwp; m.solar[i] = b.concept && b.h < 3 ? 12000 : s.solarKwp; m.floor[i] = s.floor;
     });
     metrics.current = m;
   }
+
+  // ----- rankings -----
+  const rank = useMemo(() => {
+    const sc = sceneRef.current; if (mode !== "rank" || !sc || !metrics.current.kind.length) return null;
+    return computeRanking(sc, metrics.current, districts, rk);
+  }, [mode, rk, stats.chunks, districts]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pickBuilding = useCallback((i: number) => {
+    const sc = sceneRef.current; if (!sc) return;
+    const b = sc.buildings[i];
+    sc.flyTo(b.x, b.z, Math.max(380, Math.sqrt(b.foot) * 5 + b.h * 3), b.y + b.h * 0.5);
+    setSel({ type: "b", i });
+    const r = host.current?.getBoundingClientRect(); // bring the map into view when picking from the list below it
+    if (r && (r.top < 0 || r.bottom > window.innerHeight)) host.current!.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, []);
+
+  // ----- ground look -----
+  useEffect(() => { try { const v = localStorage.getItem(LOOK_KEY) as Look | null; if (v && (v !== "google" || googleKey)) setLook(v); } catch { /* private mode */ } }, [googleKey]);
+  useEffect(() => {
+    sceneRef.current?.setLook(look, googleKey ? { key: googleKey, onError: (msg) => { console.warn("Google 3D tiles:", msg); setLook("satellite"); setLookNote("Google 3D could not load, so you're seeing the free satellite view."); } } : undefined);
+  }, [look, googleKey, stats.chunks]);
+  useEffect(() => {
+    if (look !== "google") { setAttr(""); return; }
+    const t = setInterval(() => setAttr(sceneRef.current?.attributions() ?? ""), 2000);
+    return () => clearInterval(t);
+  }, [look]);
+  useEffect(() => { if (!lookNote) return; const t = setTimeout(() => setLookNote(""), 7000); return () => clearTimeout(t); }, [lookNote]);
+  const chooseLook = (l: Look) => { setLook(l); setLookNote(""); try { localStorage.setItem(LOOK_KEY, l); } catch { /* ignore */ } };
 
   // ----- colours -----
   const paint = useCallback(() => {
@@ -133,6 +177,11 @@ export default function CityMap({ focus, alert: alertParam }: { focus?: string; 
         ramp(R_ENERGY, Math.log(1 + w) / Math.log(1 + (k === "datahall" ? 2000 : 45)), out, T.Color);
       } else if (mode === "water") {
         ramp(R_WATER, Math.log(1 + (m.m3[i] * 1000) / Math.max(1, m.floor[i])) / Math.log(1 + 12), out, T.Color);
+      } else if (mode === "rank") {
+        const v = rank ? rank.score[i] : NaN;
+        if (Number.isNaN(v)) out.set(b.concept ? "#9a958c" : "#b9b4aa").offsetHSL(0, 0, (j - 0.5) * 0.05);
+        else if (rk.list === "top") ramp(rk.util === "e" ? R_ENERGY : R_WATER_RANK, (v - rank!.lo) / Math.max(1e-6, rank!.hi - rank!.lo), out, T.Color);
+        else ramp(R_CHANGE, 0.5 + v / 0.5, out, T.Color);
       } else if (mode === "solar") {
         if (m.solar[i] > 0) out.set("#ffd60a");
         else ramp(R_SOLAR, Math.log(1 + m.roof[i]) / Math.log(1 + 400), out, T.Color);
@@ -144,9 +193,9 @@ export default function CityMap({ focus, alert: alertParam }: { focus?: string; 
         out.set(did && alertDist.has(did) ? "#c9c3b5" : "#8f8a80").offsetHSL(0, 0, (j - 0.5) * 0.05);
       }
     });
-  }, [mode, hour]);
+  }, [mode, hour, rank, rk]); // eslint-disable-line react-hooks/exhaustive-deps
   // repaint when the mode changes, and in energy mode on each new hour
-  const paintKey = mode === "energy" ? `${mode}:${Math.floor(hour)}` : mode;
+  const paintKey = mode === "energy" ? `${mode}:${Math.floor(hour)}` : mode === "rank" ? `rank:${JSON.stringify(rk)}` : mode;
   useEffect(() => { paint(); }, [paintKey, stats.chunks]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ----- time -----
@@ -179,13 +228,14 @@ export default function CityMap({ focus, alert: alertParam }: { focus?: string; 
         id: d.id, x: d.c[0], z: d.c[1], text: (DISTRICTS[d.id]?.status === "concept" ? "◇ " : "") + d.name,
         cls: "cm-d cm-" + (DISTRICTS[d.id]?.status ?? "real"), max: big.has(d.id) ? 40000 : 7000, min: 0, onClick: () => flyToDistrict(d.id),
       })),
+      ...(mode === "rank" && rank ? rank.rows.slice(0, 10).map((r, k) => { const b = sc.buildings[r.i]; return { id: "r-" + r.i, x: b.x, z: b.z, y: b.y + b.h + 30, text: `${k + 1}`, cls: "cm-r", max: 26000, onClick: () => pickBuilding(r.i) }; }) : []),
       ...(mode === "alerts" ? ALERTS.map((a) => { const [x, z] = toLocal(a.lon, a.lat); return { id: "a-" + a.id, x, z, y: sc.heightAt(x, z) + 260, text: `${ALERT_ICON[a.kind]} ${a.where}`, cls: "cm-a", max: 30000, onClick: () => flyToAlert(a) }; }) : []),
     ]);
     sc.setBeacons(ALERTS.map((a) => { const [x, z] = toLocal(a.lon, a.lat); return { id: a.id, x, z, color: ALERT_COLOR[a.kind], strong: mode === "alerts" }; }));
     const sd = sel?.type === "d" ? sel.id : null;
     sc.setOutlines(districts.filter((d) => d.id === "pax" || d.id === sd || (mode === "districts" && !["cristorey", "capas", "angeles", "mabalacat", "camp"].includes(d.id)))
       .map((d) => ({ p: d.p, color: d.id === "pax" ? "#00e0c6" : d.id === sd ? "#ff2fd0" : "#ffffff", dashed: d.id === "pax", strong: d.id === sd })));
-  }, [districts, mode, sel, flyToDistrict, flyToAlert, stats.chunks]);
+  }, [districts, mode, sel, flyToDistrict, flyToAlert, stats.chunks, rank, pickBuilding]);
 
   useEffect(() => { sceneRef.current?.select(sel?.type === "b" ? sel.i : null); }, [sel]);
   useEffect(() => { sceneRef.current?.setWheelFree(full); }, [full]);
@@ -245,6 +295,9 @@ export default function CityMap({ focus, alert: alertParam }: { focus?: string; 
           <div className="cm-top">
             <div className="cm-title"><b>New Clark City → Clark</b><span className="demo-tag">Real map · sample data</span></div>
             <div className="cm-tools">
+              <div className="cm-looks" role="radiogroup" aria-label="Map look">
+                {LOOKS.filter((l) => l.k !== "google" || googleKey).map((l) => <button key={l.k} role="radio" aria-checked={look === l.k} title={l.title} aria-label={l.label} className={"cm-btn" + (look === l.k ? " on" : "")} onClick={() => chooseLook(l.k)}>{l.icon}<span className="cm-lk-t"> {l.label}</span></button>)}
+              </div>
               {caption ? <button className="cm-btn on" onClick={stopTour}>■ Stop tour</button> : <button className="cm-btn" onClick={startTour} disabled={stats.chunks < 2}>▶ Fly-through</button>}
               <button className="cm-btn" onClick={() => { sceneRef.current?.reset(); setSel(null); }} aria-label="Reset view">⟲</button>
               <button className="cm-btn" onClick={() => sceneRef.current?.zoom(0.7)} aria-label="Zoom in">＋</button>
@@ -253,7 +306,9 @@ export default function CityMap({ focus, alert: alertParam }: { focus?: string; 
             </div>
           </div>
           {caption && <div className="cm-caption"><small>{caption.i + 1} / {caption.n}</small><b>{caption.title}</b><span>{caption.text}</span></div>}
-          <div className="cm-legend"><Legend mode={mode} /></div>
+          <div className="cm-legend"><Legend mode={mode} rk={rk} /></div>
+          {lookNote && <div className="cm-note" role="status">{lookNote}</div>}
+          <div className="cm-attr">{look === "google" ? <><b>Google</b> {attr}</> : look === "satellite" ? "Imagery: Copernicus Sentinel-2" : "© OpenStreetMap contributors"}</div>
           <div className="cm-time">
             <button className="cm-btn" onClick={() => setPlay((p) => !p)} aria-label={play ? "Pause time" : "Play time"}>{play ? "❚❚" : "▶"}</button>
             <span className="cm-clock">{night ? "🌙" : "☀️"} {hourLabel(hour)}</span>
@@ -281,7 +336,7 @@ export default function CityMap({ focus, alert: alertParam }: { focus?: string; 
             : sel?.type === "a" ? <AlertCard a={sel.a} onClose={() => setSel(null)} />
             : <Intro stats={stats} onDistrict={flyToDistrict} districts={districts} />}
         </div>
-        <div className="card">
+        {mode === "rank" ? <div className="card cm-rankcard"><RankPanel o={rk} set={setRk} res={rank} districts={districts} onPick={pickBuilding} /></div> : <div className="card">
           <h3>🚨 What the AI caught today</h3>
           <p className="hint">Sample alerts at real places. Tap one to fly there.</p>
           <div className="cm-alerts">
@@ -292,18 +347,21 @@ export default function CityMap({ focus, alert: alertParam }: { focus?: string; 
               </button>
             ))}
           </div>
-        </div>
+        </div>}
       </div>
       <p className="cm-src">
-        Map data © OpenStreetMap contributors (ODbL), via Overture Maps 2026-11-18, with some building outlines from Google Open Buildings and Microsoft ML Buildings. Terrain from AWS Terrain Tiles.
-        Building heights come from OpenStreetMap where mapped and are estimated elsewhere. Energy, water, solar, carbon, savings and alerts are sample data for this demo, not live readings.
+        Map data © OpenStreetMap contributors (ODbL), via Overture Maps 2026-11-18, with some building outlines from Google Open Buildings and Microsoft ML Buildings. Terrain from AWS Terrain Tiles. Satellite view contains modified Copernicus Sentinel data 2025 to 2026, made into a cloud-free mosaic.{googleKey ? " Google 3D view © Google and its data providers." : ""}
+        Building heights come from OpenStreetMap where mapped and are estimated elsewhere. Energy, water, monthly history, rankings, solar, carbon, savings and alerts are sample data for this demo, not live readings.
         The Pax Silica campus is a concept: its location and buildings are illustrative.
       </p>
     </div>
   );
 }
 
-function Legend({ mode }: { mode: Mode }) {
+function Legend({ mode, rk }: { mode: Mode; rk: RankOpts }) {
+  if (mode === "rank") return rk.list === "top"
+    ? <><span className="cm-ramp" style={{ background: `linear-gradient(90deg,${(rk.util === "e" ? R_ENERGY : R_WATER_RANK).join(",")})` }} /><span>Low → high {rk.util === "e" ? "electricity" : "water"}{rk.basis === "m2" ? " per m²" : ""}</span><span><i style={{ background: "#b9b4aa" }} />Not metered</span></>
+    : <><span className="cm-ramp" style={{ background: `linear-gradient(90deg,${R_CHANGE.join(",")})` }} /><span>Cut 25% → rose 25%</span><span><i style={{ background: "#b9b4aa" }} />Not metered</span></>;
   if (mode === "districts") return <>{(["civic", "apartment", "retail", "hotel", "industrial", "transport", "sports", "school", "datahall"] as Kind[]).map((k) => <span key={k}><i style={{ background: KIND_COLOR[k] }} />{KIND_LABEL[k].replace(" (concept)", "")}</span>)}<span><i style={{ background: "#d6d0c2" }} />Houses</span></>;
   if (mode === "alerts") return <>{(Object.keys(ALERT_COLOR) as (keyof typeof ALERT_COLOR)[]).map((k) => <span key={k}><i style={{ background: ALERT_COLOR[k] }} />{k[0].toUpperCase() + k.slice(1)}</span>)}</>;
   const r = mode === "energy" ? R_ENERGY : mode === "water" ? R_WATER : mode === "carbon" ? R_CARBON : R_SOLAR;
@@ -311,7 +369,7 @@ function Legend({ mode }: { mode: Mode }) {
   return <><span className="cm-ramp" style={{ background: `linear-gradient(90deg,${r.join(",")})` }} /><span>{lo} → {hi}</span>{mode === "solar" && <span><i style={{ background: "#ffd60a" }} />Has panels</span>}</>;
 }
 
-type M = { kind: Kind[]; kwh: Float32Array; m3: Float32Array; roof: Float32Array; solar: Float32Array; floor: Float32Array };
+type M = { kind: Kind[]; kwh: Float32Array; m3: Float32Array; roof: Float32Array; solar: Float32Array; floor: Float32Array; seed: Int32Array };
 const TIPS: Partial<Record<Kind, string>> = {
   home: "Friendly Taglish tips and Green Points nudge households to use aircon smarter at night.",
   apartment: "AI finds running toilets from night water flow and messages the unit owner.",
@@ -345,6 +403,7 @@ function BuildingCard({ i, sc, m, hour, districts, onDistrict, onClose }: { i: n
         <div><b>{m.solar[i] > 0 ? `${n0(m.solar[i])} kWp` : `${n0(m.roof[i])} kWp`}</b><span>{m.solar[i] > 0 ? "rooftop solar installed (sample)" : "rooftop solar potential"}</span></div>
         <div><b>{n1((Math.max(0, m.kwh[i] - m.solar[i] * 3.8) * 365 * EF) / 1000)} t</b><span>CO₂ a year</span></div>
       </div>
+      {!b.concept && <MonthBars seed={m.seed[i]} kind={k} kwhDay={m.kwh[i]} m3Day={m.m3[i]} />}
       {TIPS[k] && <p className="cm-tip">🤖 <b>What our AI does here:</b> {TIPS[k]}</p>}
     </div>
   );
