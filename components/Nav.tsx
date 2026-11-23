@@ -33,7 +33,10 @@ export default function Nav({ items, tabs, user, building }: { items: NavItem[];
   const [more, setMore] = useState(false);
   useEffect(() => setMore(false), [path]);
   useEffect(() => { document.body.style.overflow = more ? "hidden" : ""; }, [more]);
-  const on = (href: string) => path === href || path.startsWith(href + "/");
+  const under = (href: string) => path === href || path.startsWith(href + "/");
+  // The most specific matching link wins, so /green/clark lights up "Clark", not also "Green".
+  const hrefs = [...items.map((i) => i.href), ...tabs.map((t) => t.href)];
+  const on = (href: string) => under(href) && !hrefs.some((h) => h !== href && h.startsWith(href + "/") && under(h));
   const groups = [...new Set(items.map((i) => i.group))];
   const inTabs = tabs.some((t) => on(t.href));
   const moreCount = items.filter((i) => !tabs.some((t) => t.href === i.href)).reduce((s, i) => s + (i.count || 0), 0);
