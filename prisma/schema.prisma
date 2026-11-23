@@ -17,6 +17,7 @@ enum Role {
   GUARD
   INVESTOR // demo/read-only: business snapshot
   LANDLORD // shown as "Building owner": read-only whole-building view
+  CLIENT // demo/read-only: a prospect's own sustainability demo (site picked by email, see lib/green.ts)
 }
 
 enum WOStatus {

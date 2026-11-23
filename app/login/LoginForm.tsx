@@ -13,9 +13,15 @@ const ACCOUNTS: [string, string, string, string][] = [
   ["📈", "Investor", "Business snapshot: unit economics and results", "investor@skyland.test"],
 ];
 
+// Sustainability demos for prospective clients (see lib/green.ts). Same demo password.
+const GREEN: [string, string, string, string, string][] = [
+  ["ncc", "🌿", "New Clark City", "Green smart city: cut power and water, track carbon", "ncc@greendemo.test"],
+  ["pax", "🔬", "Pax Silica hub", "AI-native industrial hub: data hall PUE, water reuse, solar", "pax@greendemo.test"],
+];
+
 const errText = (e?: string | null) => e === "RATE_LIMIT" ? "Too many tries. Please wait 15 minutes and try again." : e;
 
-export default function LoginForm({ demo }: { demo: boolean }) {
+export default function LoginForm({ demo, client }: { demo: boolean; client?: string }) {
   const [err, setErr] = useState(""); const [busy, setBusy] = useState<string | null>(null);
   async function go(e: string, p: string) {
     setBusy(e); setErr("");
@@ -29,11 +35,27 @@ export default function LoginForm({ demo }: { demo: boolean }) {
           <div className="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M4 21V8l6-4v17M10 21V10l8 3v8M2 21h20" /></svg></div>
           <div><b style={{ fontFamily: "var(--display)", fontSize: 17 }}>Skyland Plaza</b><div className="hint">Managed by Building Mgt AI</div></div>
         </div>
-        {demo ? <>
+        {demo && client ? <>
+          <h2 style={{ fontSize: 22, marginBottom: 4 }}>Your sustainability demo</h2>
+          <p className="hint" style={{ margin: "0 0 14px" }}>One tap to open it. No password needed.</p>
+          <div className="roles">{GREEN.filter(([k]) => k === client).map(([, i, t, s, e]) => (
+            <button type="button" key={e} className="role green-role" disabled={!!busy} onClick={() => go(e, "Skyland2026!")}>
+              <span className="ri" aria-hidden="true">{i}</span><span style={{ flex: 1 }}><b>{t}</b><small>{busy === e ? "Opening…" : s}</small></span><span aria-hidden="true" className="chev">›</span>
+            </button>))}
+          </div>
+          {err && <div className="err" style={{ marginTop: 12 }}>{err}</div>}
+          <p className="hint" style={{ marginTop: 14 }}><a href="/login">See all demos</a></p>
+        </> : demo ? <>
           <h2 style={{ fontSize: 22, marginBottom: 4 }}>Try the demo</h2>
           <p className="hint" style={{ margin: "0 0 14px" }}>Tap who you want to be. No password needed.</p>
           <div className="roles">{ACCOUNTS.map(([i, t, s, e]) => (
             <button type="button" key={e} className="role" disabled={!!busy} onClick={() => go(e, "Skyland2026!")}>
+              <span className="ri" aria-hidden="true">{i}</span><span style={{ flex: 1 }}><b>{t}</b><small>{busy === e ? "Opening…" : s}</small></span><span aria-hidden="true" className="chev">›</span>
+            </button>))}
+          </div>
+          <div className="hint" style={{ margin: "18px 0 8px", fontWeight: 600 }}>Sustainability demos</div>
+          <div className="roles">{GREEN.map(([, i, t, s, e]) => (
+            <button type="button" key={e} className="role green-role" disabled={!!busy} onClick={() => go(e, "Skyland2026!")}>
               <span className="ri" aria-hidden="true">{i}</span><span style={{ flex: 1 }}><b>{t}</b><small>{busy === e ? "Opening…" : s}</small></span><span aria-hidden="true" className="chev">›</span>
             </button>))}
           </div>

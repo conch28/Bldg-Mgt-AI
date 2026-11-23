@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { demoMode } from "@/lib/env";
 import { allTasks, tasksFor } from "@/lib/duties";
+import { SITES, siteForEmail } from "@/lib/green";
 
 type Item = NavItem & { roles: string[] };
 const B = ["BOARD", "MANAGER", "ADMIN"], M = ["MANAGER", "ADMIN"], O = ["OWNER"], STAFF = ["MANAGER", "ADMIN", "GUARD"];
@@ -71,6 +72,8 @@ const ALL: Item[] = [
   { href: "/admin/system", label: "System & privacy", group: "Records", icon: "shield", roles: ["ADMIN"] },
   { href: "/investor", label: "Investor snapshot", group: "Overview", icon: "bars", roles: ["INVESTOR"] },
   { href: "/building-owner", label: "Owner overview", group: "Overview", icon: "pulse", roles: ["LANDLORD"] },
+  { href: "/green", label: "Sustainability", group: "Overview", icon: "bolt", roles: ["CLIENT"] },
+  { href: "/green", label: "Sustainability demos", group: "Demo views", icon: "bolt", roles: B },
   { href: "/investor", label: "Investor view", group: "Demo views", icon: "bars", roles: ["ADMIN"] },
   { href: "/building-owner", label: "Building owner view", group: "Demo views", icon: "home", roles: ["ADMIN"] },
 ];
@@ -82,6 +85,7 @@ const TABS: Record<string, Tab[]> = {
   ADMIN: [{ href: "/today", label: "Today", icon: "check" }, { href: "/work-orders", label: "Requests", icon: "wrench" }, { href: "/comms", label: "Updates", icon: "mega" }, { href: "/admin/users", label: "Users", icon: "users" }],
   INVESTOR: [{ href: "/investor", label: "Snapshot", icon: "bars" }, { href: "/account", label: "Account", icon: "users" }],
   LANDLORD: [{ href: "/building-owner", label: "Overview", icon: "pulse" }, { href: "/account", label: "Account", icon: "users" }],
+  CLIENT: [{ href: "/green", label: "Green", icon: "bolt" }, { href: "/account", label: "Account", icon: "users" }],
   GUARD: [{ href: "/frontdesk", label: "Front desk", icon: "shield" }, { href: "/rounds", label: "Rounds", icon: "route" }, { href: "/tasks", label: "Tasks", icon: "vote" }, { href: "/sos", label: "SOS", icon: "alert" }],
 };
 
@@ -110,7 +114,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <Providers>
       <a href="#main" className="sr-only">Skip to content</a>
       <div className="app">
-        <Nav items={items} tabs={tabs} user={{ name: u.name, role: u.role }} building={b?.name ?? ""} />
+        <Nav items={items} tabs={tabs} user={{ name: u.name, role: u.role }} building={u.role === "CLIENT" ? SITES[siteForEmail(u.email) ?? "ncc"].name : b?.name ?? ""} />
         <div className="main" id="main">
           {isStaff && sos > 0 && <Link href="/sos" className="sos-banner" role="alert"><b>SOS</b> {sos} emergency alert{sos > 1 ? "s" : ""} need{sos > 1 ? "" : "s"} a response now. Tap to open.</Link>}
           {overdue > 0 && <Link href="/tasks" className="overdue-banner"><b>{overdue} record{overdue > 1 ? "s" : ""} overdue.</b> Tap to enter {overdue > 1 ? "them" : "it"} now.</Link>}

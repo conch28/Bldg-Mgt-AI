@@ -16,7 +16,7 @@ const H = 3600000, D = 24 * H;
 export type Owner = Role | "TECH" | "RESIDENT" | "AI";
 export const OWNER_LABEL: Record<Owner, string> = {
   OWNER: "Owner / resident", RESIDENT: "Resident", BOARD: "Board", MANAGER: "Property manager", ADMIN: "Operations head (Building Mgt AI)",
-  GUARD: "Guard / front desk", TECH: "Technician or vendor", AI: "AI assistant", INVESTOR: "Investor (view only)", LANDLORD: "Building owner (view only)",
+  GUARD: "Guard / front desk", TECH: "Technician or vendor", AI: "AI assistant", INVESTOR: "Investor (view only)", LANDLORD: "Building owner (view only)", CLIENT: "Client demo (view only)",
 };
 /** Who is told when the owner of a step is late: level 2 goes to the supervisor, level 3 to the board. */
 export const SUPERVISOR: Partial<Record<Owner, Role>> = { GUARD: "MANAGER", TECH: "MANAGER", MANAGER: "ADMIN", ADMIN: "BOARD", BOARD: "BOARD" };

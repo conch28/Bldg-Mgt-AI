@@ -14,6 +14,7 @@ import { seedV6 } from "./seed-v6";
 import { seedV7 } from "./seed-v7";
 import { seedV8 } from "./seed-v8";
 import { SITE, allUnits } from "../lib/skyland";
+import { CLIENT_LOGINS } from "../lib/green";
 
 const prisma = new PrismaClient();
 
@@ -47,7 +48,8 @@ async function ensureViewers() {
   const building = await prisma.building.findFirst({ orderBy: { createdAt: "asc" } });
   if (!building) return;
   const hash = await bcrypt.hash(process.env.SEED_PASSWORD ?? "Skyland2026!", 10);
-  const viewers: [string, string, Role][] = [["investor@skyland.test", "Demo Investor", "INVESTOR"], ["building@skyland.test", "Building Owner", "LANDLORD"]];
+  const viewers: [string, string, Role][] = [["investor@skyland.test", "Demo Investor", "INVESTOR"], ["building@skyland.test", "Building Owner", "LANDLORD"],
+    ...CLIENT_LOGINS.map((c): [string, string, Role] => [c.email, c.name, "CLIENT"])];
   for (const [email, name, role] of viewers) {
     if (await prisma.user.findUnique({ where: { email } })) continue;
     await prisma.user.create({ data: { email, name, role, passwordHash: hash, buildingId: building.id } });

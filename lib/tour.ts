@@ -42,6 +42,11 @@ export const CARDS: Record<string, Card[]> = {
     { icon: "💰", t: "Income and spending", b: "Dues collected against operating costs each month, so you see the surplus without waiting for a report." },
     { icon: "🔧", t: "Assets and capex", b: "Equipment nearing the end of its life, with estimated replacement costs, so big bills are never a surprise." },
   ],
+  CLIENT: [
+    { icon: "🌿", t: "Welcome po!", b: "This is a sustainability demo built for you, with sample data. It shows how our AI cuts power and water use and cost." },
+    { icon: "⚡", t: "Watch a day go by", b: "The live flow shows sun, battery and grid hour by hour. Flip any AI action to see the savings change." },
+    { icon: "💚", t: "People first", b: "Savings are the proof. The goal is cooler, happier homes and workplaces, with friendly nudges and Green Points." },
+  ],
   GUARD: [
     { icon: "👋", t: "Welcome to the front desk", b: "This is your guard station. The big buttons at the bottom are all you need." },
     { icon: "📷", t: "Check every guest", b: "Scan the guest's QR or type the 6-letter code. Make sure their face matches the photo on the pass." },
