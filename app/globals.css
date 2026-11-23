@@ -896,6 +896,76 @@ h2.section-h{font-size:17px;margin:6px 0 0}
 @media (max-width:900px){.g-actions{grid-template-columns:minmax(0,1fr)}.g-hero-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:760px){.g-jump{top:56px}.green .g-hero{padding:18px 16px 14px}.green .g-hero h2{font-size:23px}.g-hero-stats b{font-size:20px}}
 
+/* Clark City command center (/green/clark) */
+.cc-hero{border-radius:18px;padding:22px 22px 16px;color:#fff;position:relative;overflow:hidden;background:radial-gradient(circle at 85% 0%,rgba(60,196,201,.35),transparent 45%),linear-gradient(135deg,#071a2c 0%,#0c3448 50%,#0b5d3b 100%)}
+.cc-hero h2{font-size:28px;margin:12px 0 4px}
+.cc-hero h2 small{font-size:15px;font-weight:500;opacity:.8}
+.cc-hero p{margin:0;max-width:760px;opacity:.92;font-size:14.5px}
+.cc-stats{grid-template-columns:repeat(6,minmax(0,1fr))}
+.cc-live i{display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff5a4a;margin-right:6px;vertical-align:0;animation:ccblink 1.4s infinite}
+@keyframes ccblink{50%{opacity:.25}}
+.cc-btn{border:0;cursor:pointer;font:inherit;font-size:12px;font-weight:600}
+.cc-btn:hover{background:rgba(255,255,255,.28)}
+.cc-live-grid{grid-template-columns:minmax(0,5fr) minmax(0,7fr)}
+.cc-map{width:100%;max-height:560px;display:block;margin-top:8px}
+.cc-zone{fill:var(--panel-2);fill-opacity:.92;stroke:var(--line)}
+.cc-map text.cc-zl{font-size:10.5px;letter-spacing:.08em;font-weight:600;fill:var(--muted)}
+.cc-road{fill:none;stroke:var(--line);stroke-width:7;stroke-linecap:round}
+.cc-node{cursor:pointer;outline:none}
+.cc-node:focus-visible circle{stroke:var(--accent);stroke-width:3}
+.cc-map text.cc-nv{fill:#fff;font-weight:700;font-size:11px;pointer-events:none}
+.cc-map text.cc-nl{fill:var(--fg);font-size:10.5px;font-weight:600;pointer-events:none}
+.cc-pulse{fill:none;stroke:var(--bad);stroke-width:2;transform-box:fill-box;transform-origin:center;animation:ccpulse 1.8s ease-out infinite}
+@keyframes ccpulse{0%{opacity:.9;transform:scale(1)}100%{opacity:0;transform:scale(1.35)}}
+.cc-dt{margin-top:10px}
+.cc-dt td,.cc-dt th{padding:7px 8px}
+.cc-dt tr.on td{background:var(--accent-soft)}
+.cc .r{text-align:right}
+.cc-alerts{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+.cc-alert{border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:5px;min-width:0}
+.cc-alert.s-critical{border-left-color:var(--bad);background:color-mix(in srgb,var(--bad-soft) 40%,var(--panel))}
+.cc-alert.s-high{border-left-color:var(--warn)}
+.cc-at{font-size:14px;line-height:1.3}
+.cc-ad{font-size:13px}
+.cc-afix{font-size:12.5px;background:var(--panel-2);border-radius:8px;padding:6px 8px}
+.cc-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.cc-scroll table{min-width:720px}
+.cc-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);opacity:.5}
+.cc-dot.on{background:var(--ok);opacity:1;box-shadow:0 0 0 3px var(--ok-soft)}
+.cc-funnel{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin:12px 0}
+.cc-funnel div{background:var(--panel-2);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;position:relative}
+.cc-funnel div:nth-child(4),.cc-funnel div:nth-child(5){background:var(--ok-soft)}
+.cc-funnel b{font-size:12px;color:var(--muted)}
+.cc-funnel span{font-family:var(--display);font-size:22px;font-weight:700}
+.cc-funnel small{font-size:11.5px;color:var(--muted)}
+.cc-stage{border:0;cursor:pointer;font:inherit;font-size:12px;white-space:nowrap}
+.cc-stage:disabled{cursor:default}
+.cc-feel{list-style:none;padding:0;margin:10px 0 0;display:flex;flex-direction:column;gap:10px}
+.cc-feel li{display:flex;flex-direction:column;background:var(--panel-2);border-radius:10px;padding:10px 12px}
+.cc-feel span{font-size:12.5px;color:var(--muted)}
+.cc-phases{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+.cc-phase{display:flex;gap:12px;align-items:flex-start}
+.cc-pdot{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);flex:none;display:grid;place-items:center;font-size:12px;color:#fff;margin-top:1px}
+.cc-phase.done .cc-pdot{background:var(--ok);border-color:var(--ok)}
+@media (max-width:1100px){.cc-live-grid{grid-template-columns:minmax(0,1fr)}.cc-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:640px){.cc-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.cc-hero h2{font-size:22px}.cc-funnel{grid-template-columns:repeat(3,minmax(0,1fr))}.cc-map{max-height:440px}}
+@media (prefers-reduced-motion:reduce){.cc-pulse,.cc-live i{animation:none}}
+/* Wall screen: no app chrome, bigger type, everything at a glance from across the room. */
+html.cc-wall .side,html.cc-wall .mtop,html.cc-wall .tabbar,html.cc-wall .top,html.cc-wall .g-jump,html.cc-wall .overdue-banner,html.cc-wall .tour-scrim,html.cc-wall .spot-wrap,html.cc-wall .tips-fab{display:none!important}
+html.cc-wall .app{grid-template-columns:minmax(0,1fr)}
+html.cc-wall .view.cc{max-width:none;padding:18px 24px}
+html.cc-wall body{font-size:15px}
+html.cc-wall .cc-hero h2{font-size:34px}
+html.cc-wall .g-hero-stats b{font-size:32px}
+.cc-3d{display:flex;align-items:center;gap:12px;margin-top:14px;padding:12px 16px;border-radius:14px;background:rgba(255,255,255,.95);color:#0b3a46;text-decoration:none;max-width:560px;box-shadow:0 8px 24px -12px rgba(0,0,0,.5);transition:transform .15s}
+.cc-3d:hover{transform:translateY(-1px)}
+.cc-3d>span:first-child{font-size:26px}
+.cc-3d>span:nth-child(2){flex:1;display:flex;flex-direction:column}
+.cc-3d b{font-size:16px}.cc-3d small{font-size:12px;opacity:.75}
+.cc-3d>span:last-child{font-size:20px;font-weight:700}
+.cc-kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.cc-kpi{border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.cc-kv{font-family:var(--display);font-weight:700;font-size:22px}
 /* ---------- 3D city map (/green/map) ---------- */
 .green .g-maplink{display:inline-flex;align-items:center;gap:6px;margin:2px 0 10px;padding:8px 14px;border-radius:99px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.45);color:#fff;font-weight:700;font-size:13.5px;text-decoration:none;position:relative;z-index:1}
 .green .g-maplink:hover{background:rgba(255,255,255,.28)}
