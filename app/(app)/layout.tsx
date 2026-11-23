@@ -9,6 +9,7 @@ import { redirect } from "next/navigation";
 import { demoMode } from "@/lib/env";
 import { allTasks, tasksFor } from "@/lib/duties";
 import { SITES, siteForEmail } from "@/lib/green";
+import { BCDA_LOGIN, BCDA_NAME } from "@/lib/bcda";
 
 type Item = NavItem & { roles: string[] };
 const B = ["BOARD", "MANAGER", "ADMIN"], M = ["MANAGER", "ADMIN"], O = ["OWNER"], STAFF = ["MANAGER", "ADMIN", "GUARD"];
@@ -78,6 +79,7 @@ const ALL: Item[] = [
   { href: "/green/clark", label: "Clark command center", group: "Demo views", icon: "pulse", roles: B },
   { href: "/green/map", label: "3D city map", group: "Overview", icon: "box", roles: ["CLIENT"] },
   { href: "/green/map", label: "3D city map", group: "Demo views", icon: "box", roles: B },
+  { href: "/green/bcda", label: "BCDA building (NGAC)", group: "Demo views", icon: "home", roles: B },
   { href: "/investor", label: "Investor view", group: "Demo views", icon: "bars", roles: ["ADMIN"] },
   { href: "/building-owner", label: "Building owner view", group: "Demo views", icon: "home", roles: ["ADMIN"] },
 ];
@@ -92,6 +94,14 @@ const TABS: Record<string, Tab[]> = {
   CLIENT: [{ href: "/green", label: "Green", icon: "bolt" }, { href: "/green/clark", label: "Clark", icon: "pulse" }, { href: "/green/map", label: "3D map", icon: "box" }, { href: "/account", label: "Account", icon: "users" }],
   GUARD: [{ href: "/frontdesk", label: "Front desk", icon: "shield" }, { href: "/rounds", label: "Rounds", icon: "route" }, { href: "/tasks", label: "Tasks", icon: "vote" }, { href: "/sos", label: "SOS", icon: "alert" }],
 };
+
+// The BCDA client demo (lib/bcda.ts) sees its own building first, then the city views.
+const BCDA_ITEMS: Item[] = [
+  { href: "/green/bcda", label: "NGAC building", group: "Overview", icon: "home", roles: ["CLIENT"] },
+  { href: "/green/map", label: "3D city map", group: "Overview", icon: "box", roles: ["CLIENT"] },
+  { href: "/green/clark", label: "Clark command center", group: "Overview", icon: "pulse", roles: ["CLIENT"] },
+];
+const BCDA_TABS: Tab[] = [{ href: "/green/bcda", label: "Building", icon: "home" }, { href: "/green/map", label: "3D map", icon: "box" }, { href: "/green/clark", label: "Clark", icon: "pulse" }, { href: "/account", label: "Account", icon: "users" }];
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const u = await requireRole();
@@ -111,14 +121,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const dataP0 = ["BOARD", "MANAGER", "ADMIN"].includes(u.role) ? await prisma.dataIssue.count({ where: { buildingId: u.buildingId, status: "OPEN", severity: "P0" } }) : 0;
   const overdue = u.role === "OWNER" ? 0 : tasksFor(await allTasks().catch(() => []), u.role).filter((t) => t.level >= 1).length;
   const counts: Record<string, number> = { "/tasks": overdue, "/comms": pending, "/work-orders": escalated, "/updates": unread, "/today": pending + escalated + risk, "/happiness": risk, "/sos": sos, "/property": inquiries, "/procurement": toSign, "/data": dataP0 };
-  const items = ALL.filter((i) => i.roles.includes(u.role)).map(({ roles, ...i }) => ({ ...i, count: counts[i.href] || 0 }));
+  const bcdaClient = u.role === "CLIENT" && u.email.toLowerCase() === BCDA_LOGIN;
+  const items = (bcdaClient ? BCDA_ITEMS : ALL.filter((i) => i.roles.includes(u.role))).map(({ roles, ...i }) => ({ ...i, count: counts[i.href] || 0 }));
   items.push({ href: `${homeFor(u.role)}?tour=1`, label: "App tour", group: "Help", icon: "spark", count: 0 });
-  const tabs = (TABS[u.role] ?? []).map((t) => ({ ...t, count: counts[t.href] || 0 }));
+  const tabs = (bcdaClient ? BCDA_TABS : TABS[u.role] ?? []).map((t) => ({ ...t, count: counts[t.href] || 0 }));
   return (
     <Providers>
       <a href="#main" className="sr-only">Skip to content</a>
       <div className="app">
-        <Nav items={items} tabs={tabs} user={{ name: u.name, role: u.role }} building={u.role === "CLIENT" ? SITES[siteForEmail(u.email) ?? "ncc"].name : b?.name ?? ""} />
+        <Nav items={items} tabs={tabs} user={{ name: u.name, role: u.role }} building={bcdaClient ? BCDA_NAME : u.role === "CLIENT" ? SITES[siteForEmail(u.email) ?? "ncc"].name : b?.name ?? ""} />
         <div className="main" id="main">
           {isStaff && sos > 0 && <Link href="/sos" className="sos-banner" role="alert"><b>SOS</b> {sos} emergency alert{sos > 1 ? "s" : ""} need{sos > 1 ? "" : "s"} a response now. Tap to open.</Link>}
           {overdue > 0 && <Link href="/tasks" className="overdue-banner"><b>{overdue} record{overdue > 1 ? "s" : ""} overdue.</b> Tap to enter {overdue > 1 ? "them" : "it"} now.</Link>}
