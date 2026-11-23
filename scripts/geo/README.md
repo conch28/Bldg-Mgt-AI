@@ -23,3 +23,22 @@ python3 scripts/geo/build-city.py public/green/geo /tmp/ncc/tiles ncc=/tmp/ncc/n
 Heights come from OSM `height` / `building:levels` where mapped and are estimated from building type and size elsewhere.
 All energy, water, solar, carbon and alert numbers on the map are sample data made in `lib/nccCity.ts`.
 The Pax Silica campus is a concept: its site and buildings are illustrative.
+
+## Satellite photo (free fallback look)
+
+`fetch-satellite.py` bakes `public/green/geo/sat-ncc.jpg` and `sat-clark.jpg` from free Copernicus
+Sentinel-2 imagery on AWS (`sentinel-cogs`, no key). It masks clouds with each scene's SCL band and
+takes the per-pixel median of 14 dry-season scenes, so the result is cloud-free. Images are aligned to
+the ground meshes using `terrain.json`, so rerun it whenever the terrain grid changes.
+
+    pip install rasterio numpy pillow
+    python3 scripts/geo/fetch-satellite.py public/green/geo
+
+Attribution: "Contains modified Copernicus Sentinel data 2025 to 2026".
+
+## Google photorealistic 3D (optional)
+
+Set `GOOGLE_MAPS_API_KEY` (Map Tiles API enabled, billing on, key restricted to the site's domain).
+The map then offers a "Google 3D" look via `3d-tiles-renderer`; the Draco decoder it needs is served
+from `public/green/draco/` (copied from `three/examples/jsm/libs/draco/gltf`). If Google fails to load,
+the map falls back to the satellite look on its own.

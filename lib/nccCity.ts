@@ -26,6 +26,7 @@ export type ChunkData = {
 // Same origin and scale as the build script.
 const OLON = 120.531, OLAT = 15.3445;
 const KX = Math.cos((OLAT * Math.PI) / 180) * 111320, KY = 110574;
+export const ORIGIN = { lon: OLON, lat: OLAT };
 export const toLocal = (lon: number, lat: number): [number, number] => [(lon - OLON) * KX, -(lat - OLAT) * KY];
 
 export type Kind = "home" | "apartment" | "civic" | "sports" | "school" | "retail" | "industrial" | "farm" | "religious" | "utility" | "datahall" | "hotel" | "transport";
@@ -117,7 +118,9 @@ const hash = (i: number) => { let x = (i + 1) * 2654435761; x ^= x >>> 15; x = M
 
 /** Sample metrics for a building, from its real footprint and estimated height. */
 export function sampleMetrics(i: number, kind: Kind, footprint: number, height: number, ncc: boolean): Metrics {
-  const floors = Math.max(1, Math.round(height / 3.3));
+  // Stadiums, halls, sheds and terminals are tall single volumes, not stacks of 3.3 m floors.
+  const cap = kind === "sports" ? 1.5 : kind === "industrial" || kind === "farm" || kind === "utility" ? 1.3 : kind === "transport" ? 2 : 99;
+  const floors = Math.min(cap, Math.max(1, Math.round(height / 3.3)));
   const floor = footprint * floors;
   const r = 0.75 + 0.5 * hash(i);
   const kwhDay = kind === "datahall" ? 4000 * 24 * 1.31 : (floor * EUI[kind] * r) / 365; // concept halls: 4 MW IT at PUE 1.31
@@ -206,3 +209,43 @@ export const FOCUS_ALIAS: Record<string, string> = {
   "ncc-gov": "ngac", "ncc-res": "village", "ncc-sports": "ngac", "pax-hub": "pax",
   "cfz-aviation": "airport", "cfz-industrial": "philexcel", "cfz-commercial": "gateway", "cfz-hospitality": "mimosa", "cfz-residential": "cfz",
 };
+
+// ---------- Monthly history for rankings (sample data) ----------
+/** Stable per-building seed from its position, so phones and laptops see the same numbers. */
+export const seedAt = (x: number, z: number) => ((Math.imul(Math.round(x), 7919) ^ Math.imul(Math.round(z), 104729)) >>> 0) % 1000003;
+/** 24 months of history, oldest first, ending with the last full month. */
+export const HIST_MONTHS = 24;
+export const HIST_END = { y: 2026, m: 10 }; // October 2026
+export function histMonth(t: number) {
+  const k = HIST_END.y * 12 + (HIST_END.m - 1) - (HIST_MONTHS - 1 - t);
+  return { y: Math.floor(k / 12), m: (k % 12) + 1 };
+}
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export const monthName = (t: number, year = true) => { const { y, m } = histMonth(t); return MON[m - 1] + (year ? ` ${y}` : ""); };
+// Luzon seasons: hot dry March to May drives cooling; wet season July to September is milder.
+const SEASON_E = [0.92, 0.93, 1.0, 1.1, 1.12, 1.04, 0.99, 0.98, 0.98, 1.0, 0.98, 0.94];
+const SEASON_W = [0.95, 0.96, 1.03, 1.1, 1.1, 1.0, 0.96, 0.95, 0.96, 0.99, 0.99, 0.98];
+
+/**
+ * Monthly kWh and m³ for one building. Each building gets its own trend (from -18% to +10% a year),
+ * about one in six starts an efficiency programme partway through (a step down of 8 to 22%), and
+ * schools drop during the April to May break. Deterministic, so rankings are repeatable.
+ */
+export function monthlyHistory(seed: number, kind: Kind, kwhDay: number, m3Day: number, e: Float32Array, w: Float32Array) {
+  const r = -0.18 + 0.28 * hash(seed + 11);
+  const prog = hash(seed + 13) < 0.17, start = 6 + Math.floor(hash(seed + 17) * 15), cut = 0.08 + 0.14 * hash(seed + 19);
+  const wr = r * 0.7 + (hash(seed + 23) - 0.5) * 0.1;
+  for (let t = 0; t < HIST_MONTHS; t++) {
+    const { y, m } = histMonth(t);
+    const days = new Date(y, m, 0).getDate();
+    const age = (t - (HIST_MONTHS - 1)) / 12;
+    const step = prog && t >= start ? 1 : prog ? 1 / (1 - cut) : 1; // today's level already includes the cut
+    const brk = kind === "school" && (m === 4 || m === 5) ? 0.55 : 1;
+    const ne = 1 + (hash(seed * 31 + t) - 0.5) * 0.08, nw = 1 + (hash(seed * 37 + t) - 0.5) * 0.1;
+    e[t] = kwhDay * days * SEASON_E[m - 1] * Math.pow(1 + r, age) * step * brk * ne;
+    w[t] = m3Day * days * SEASON_W[m - 1] * Math.pow(1 + wr, age) * (prog && t < start ? 1 / (1 - cut * 0.6) : 1) * brk * nw;
+  }
+  return { programmeMonth: prog ? start : -1 };
+}
+/** Sum of months [a, b] inclusive. */
+export const sumRange = (v: Float32Array, a: number, b: number) => { let s = 0; for (let t = a; t <= b; t++) s += v[t]; return s; };

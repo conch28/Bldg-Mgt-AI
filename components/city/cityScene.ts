@@ -4,13 +4,16 @@
 
 import * as THREE from "three";
 import { MapControls } from "three/examples/jsm/controls/MapControls.js";
-import type { ChunkData, TerrainData, Concept } from "@/lib/nccCity";
+import { ORIGIN, type ChunkData, type TerrainData, type Concept } from "@/lib/nccCity";
+import type { GoogleTiles } from "./googleTiles";
 
 export type Bld = { kind: number; dist: number; foot: number; h: number; x: number; z: number; y: number; name: string | null; concept?: string };
 type Target = { mesh: THREE.InstancedMesh; i: number } | { geo: THREE.BufferGeometry; v0: number; vn: number };
 export type Label = { id: string; x: number; z: number; y?: number; text: string; cls?: string; min?: number; max?: number; onClick?: () => void };
 export type Beacon = { id: string; x: number; z: number; color: string; strong: boolean };
 export type Stop = { pos: [number, number, number]; look: [number, number, number] };
+/** Ground look: free satellite photo (default), drawn map, or Google photorealistic 3D. */
+export type Look = "satellite" | "map" | "google";
 
 export type CityScene = {
   buildings: Bld[];
@@ -30,6 +33,8 @@ export type CityScene = {
   zoom(f: number): void;
   setWheelFree(free: boolean): void;
   heightAt(x: number, z: number): number;
+  setLook(look: Look, google?: { key: string; onError: (msg: string) => void }): void;
+  attributions(): string;
   dispose(): void;
 };
 
@@ -42,6 +47,8 @@ const LAND: Record<string, string> = {
   cem: "#b7caa6", cons: "#dccaa5", farm: "#c6d092", mil: "#c4c8b2", quarry: "#d7ccb5", wood: "#7fae69",
 };
 const BASE_GROUND = "#bccb9a";
+/** EGM96 geoid height near Clark, metres above the WGS84 ellipsoid (Google tiles use the ellipsoid). */
+const GEOID = 44;
 
 export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData; mobile: boolean; onPick: (i: number | null, x: number, z: number) => void }): CityScene {
   const { host, terrain: T, mobile } = opts;
@@ -128,7 +135,7 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
   }
   const W = (nx - 1) * step;
   /** Chunk ground meshes, split by row ranges of the shared grid. */
-  type Ground = { mesh: THREE.Mesh; zA: number; zB: number; mat: THREE.MeshLambertMaterial };
+  type Ground = { mesh: THREE.Mesh; zA: number; zB: number; mat: THREE.MeshLambertMaterial; drawn?: THREE.Texture; sat?: THREE.Texture };
   const grounds: Record<string, Ground> = {};
   function ground(id: string, zA: number, zB: number) {
     const jA = Math.max(0, Math.floor((zA - z0) / step)), jB = Math.min(nz - 1, Math.ceil((zB - z0) / step));
@@ -150,8 +157,8 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
   ground("ncc", z0, zSplit);
   ground("clark", zSplit, z0 + (nz - 1) * step);
   // A wide plain under everything so the horizon isn't a cliff.
-  { const g = new THREE.PlaneGeometry(400000, 400000); g.rotateX(-Math.PI / 2); g.translate(0, -2, 0);
-    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: "#9fb07f" })); m.renderOrder = -1; scene.add(m); }
+  const plain = (() => { const g = new THREE.PlaneGeometry(400000, 400000); g.rotateX(-Math.PI / 2); g.translate(0, -2, 0);
+    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: "#9fb07f" })); m.renderOrder = -1; scene.add(m); return m; })();
 
   // ---------- ground painting ----------
   function paintGround(c: ChunkData) {
@@ -199,9 +206,55 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
     for (const a of c.airport) if (a.t === "runway") { n.strokeStyle = "rgba(255,255,230,0.95)"; n.setLineDash([2, 3]); n.lineWidth = 1.4; path(n, a.p, 0.5); n.stroke(); n.setLineDash([]); }
     const tex = new THREE.CanvasTexture(day); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
     const em = new THREE.CanvasTexture(nightC); em.colorSpace = THREE.SRGBColorSpace;
-    gr.mat.color.set("#ffffff"); gr.mat.map = tex; gr.mat.emissiveMap = em; gr.mat.emissive.set("#ffffff"); gr.mat.emissiveIntensity = U.uNight.value;
+    gr.drawn = tex;
+    gr.mat.color.set("#ffffff"); gr.mat.map = look === "map" || !gr.sat ? tex : gr.sat; gr.mat.emissiveMap = em; gr.mat.emissive.set("#ffffff"); gr.mat.emissiveIntensity = U.uNight.value;
     gr.mat.needsUpdate = true;
     // UVs on PlaneGeometry run u: west→east, v: south→north, which matches the canvas (top = north).
+  }
+
+  // ---------- ground look: satellite photo, drawn map or Google 3D ----------
+  let look: Look = "satellite";
+  let google: GoogleTiles | null = null, googleLoading = false;
+  const texLoader = new THREE.TextureLoader();
+  function loadSat(id: string, gr: Ground) {
+    if (gr.sat) return;
+    // Cloud-free Sentinel-2 mosaic baked by scripts/geo/fetch-satellite.py, aligned to this ground mesh.
+    gr.sat = texLoader.load(`/green/geo/sat-${id}.jpg`, () => { if (look !== "map") { gr.mat.map = gr.sat!; gr.mat.needsUpdate = true; } });
+    gr.sat.colorSpace = THREE.SRGBColorSpace; gr.sat.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  }
+  function applyLook() {
+    const g = look === "google" && google != null;
+    for (const [id, gr] of Object.entries(grounds)) {
+      if (look === "satellite") loadSat(id, gr);
+      const want = look === "map" ? gr.drawn : gr.sat?.image ? gr.sat : gr.drawn;
+      if (want && gr.mat.map !== want) { gr.mat.map = want; gr.mat.needsUpdate = true; }
+      gr.mesh.visible = !g;
+    }
+    (plain.material as THREE.MeshLambertMaterial).color.set(look === "map" ? "#9fb07f" : "#6f7652");
+    plain.visible = !g;
+    if (google) google.group.visible = g;
+    carPts.visible = !g;
+    // On Google 3D our boxes would hide the real buildings: show them only as a see-through data layer.
+    for (const m of [boxMat, polyMat]) { m.transparent = g; m.opacity = g ? 0.62 : 1; m.depthWrite = !g; m.needsUpdate = true; }
+    for (const o of pickables) o.visible = !g || dataMode;
+  }
+  function setLook(l: Look, gopt?: { key: string; onError: (msg: string) => void }) {
+    look = l;
+    if (l === "google" && !google && !googleLoading && gopt?.key) {
+      googleLoading = true;
+      import("./googleTiles").then(({ createGoogleTiles }) => {
+        googleLoading = false;
+        if (disposed) return;
+        google = createGoogleTiles({ key: gopt.key, lon0: ORIGIN.lon, lat0: ORIGIN.lat, geoid: GEOID, camera, renderer, mobile, onError: (msg) => {
+          if (look === "google") { look = "satellite"; applyLook(); }
+          gopt.onError(msg);
+        } });
+        scene.add(google.group);
+        google.setShade(shade);
+        applyLook();
+      }).catch((e) => { googleLoading = false; look = "satellite"; applyLook(); gopt.onError(String(e)); });
+    }
+    applyLook();
   }
 
   // ---------- buildings ----------
@@ -459,11 +512,12 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
     U.uNight.value = night;
     (stars.material as THREE.PointsMaterial).opacity = Math.max(0, night - 0.3);
     for (const g of Object.values(grounds)) g.mat.emissiveIntensity = night * 1.2;
+    shade = 0.22 + 0.78 * Math.max(day, 1 - night) ; google?.setShade(shade);
     carColors();
     if (dataMode) U.uGlow.value = 0.08 + 0.5 * night;
   }
-  let dataMode = false;
-  function setDataMode(on: boolean) { dataMode = on; U.uWin.value = on ? 0.3 : 1; U.uGlow.value = on ? 0.08 + 0.5 * U.uNight.value : 0; }
+  let dataMode = false, shade = 1;
+  function setDataMode(on: boolean) { const ch = on !== dataMode; dataMode = on; U.uWin.value = on ? 0.3 : 1; U.uGlow.value = on ? 0.08 + 0.5 * U.uNight.value : 0; if (ch && look === "google") applyLook(); }
 
   // ---------- camera moves ----------
   const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -567,20 +621,24 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
       ring.scale.setScalar((12 + ph * 55) * k); (ring.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - ph);
     });
     if (marker.visible) (marker.material as THREE.MeshBasicMaterial).opacity = 0.25 + 0.15 * Math.sin(now * 4);
+    if (google && google.group.visible) google.update();
     renderer.render(scene, camera);
     placeLabels();
   }
   setHour(13);
+  applyLook();
   loop();
 
   return {
-    buildings, addChunk, addConcept, paint, setHour, setDataMode, select, setLabels, setBeacons, setOutlines, flyTo, tour, stopTour, reset, zoom, heightAt,
+    buildings, addChunk, addConcept, paint, setHour, setDataMode, select, setLabels, setBeacons, setOutlines, flyTo, tour, stopTour, reset, zoom, heightAt, setLook,
+    attributions() { return google && look === "google" ? google.attributions() : ""; },
     setWheelFree(f) { wheelFree = f; },
     dispose() {
       disposed = true; cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); document.removeEventListener("visibilitychange", onVis);
       renderer.domElement.removeEventListener("wheel", onWheel);
       renderer.domElement.removeEventListener("pointerdown", onDown); renderer.domElement.removeEventListener("pointerup", onUp);
       controls.dispose();
+      if (google) { scene.remove(google.group); google.dispose(); google = null; }
       scene.traverse((o) => { const m = o as THREE.Mesh; m.geometry?.dispose?.(); const mat = m.material as THREE.Material | THREE.Material[] | undefined; (Array.isArray(mat) ? mat : mat ? [mat] : []).forEach((x) => { (x as THREE.MeshLambertMaterial).map?.dispose(); (x as THREE.MeshLambertMaterial).emissiveMap?.dispose(); x.dispose(); }); });
       renderer.dispose(); renderer.domElement.remove(); labelLayer.remove();
     },
