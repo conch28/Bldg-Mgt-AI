@@ -5,6 +5,8 @@
 // All site numbers are SAMPLE data made for the demo. Public facts we lean on are listed in `sources`.
 // Rates and factors are assumptions, labelled as such on screen.
 
+import { BCDA_LOGIN } from "./bcda";
+
 export type SiteKey = "ncc" | "pax";
 export type Kind = "home" | "office" | "sports" | "retail" | "datahall" | "plant" | "lab";
 export type Bldg = { name: string; kind: Kind; icon: string; detail: string; kwhDay: number; m3Day: number; occupants: number; comfort: number; vsLastMonth: number };
@@ -168,7 +170,7 @@ const PAX: Site = {
 
 export const SITES: Record<SiteKey, Site> = { ncc: NCC, pax: PAX };
 export const siteForEmail = (email: string): SiteKey | null => (Object.values(SITES).find((s) => s.login === email.toLowerCase())?.key ?? null);
-export const CLIENT_LOGINS = Object.values(SITES).map((s) => ({ email: s.login, name: `${s.name} demo` }));
+export const CLIENT_LOGINS = [...Object.values(SITES).map((s) => ({ email: s.login, name: `${s.name} demo` })), { email: BCDA_LOGIN, name: "BCDA demo" }];
 
 // ---------- Hourly simulation ----------
 const SHAPE: Record<Kind, (h: number) => number> = {

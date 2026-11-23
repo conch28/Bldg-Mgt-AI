@@ -3,6 +3,8 @@ import { PageHead } from "@/components/ui";
 import GreenDashboard from "@/components/green/GreenDashboard";
 import { SITES, siteForEmail, briefingFacts, type SiteKey } from "@/lib/green";
 import { writeDoc } from "@/lib/ai";
+import { redirect } from "next/navigation";
+import { BCDA_LOGIN } from "@/lib/bcda";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Sustainability" };
@@ -11,6 +13,8 @@ const SYSTEM = "You are the AI sustainability assistant of a property manager in
 
 export default async function Green({ searchParams }: { searchParams: { site?: string } }) {
   const u = await requireRole("CLIENT", "BOARD", "MANAGER", "ADMIN");
+  // The BCDA demo login lands on its own building, not the green district dashboards.
+  if (u.role === "CLIENT" && u.email.toLowerCase() === BCDA_LOGIN) redirect("/green/bcda");
   // Client demo logins always see their own site; our own team can switch between the demos.
   const own = u.role === "CLIENT" ? siteForEmail(u.email) ?? "ncc" : null;
   const key: SiteKey = own ?? (searchParams.site === "pax" ? "pax" : "ncc");
