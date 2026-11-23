@@ -17,6 +17,7 @@ const ACCOUNTS: [string, string, string, string][] = [
 const GREEN: [string, string, string, string, string][] = [
   ["ncc", "🌿", "New Clark City", "Green smart city: cut power and water, track carbon", "ncc@greendemo.test"],
   ["pax", "🔬", "Pax Silica hub", "AI-native industrial hub: data hall PUE, water reuse, solar", "pax@greendemo.test"],
+  ["bcda", "🏛️", "BCDA · NGAC building", "Uptime, energy, assets, COA-ready spending, leases, safety", "bcda@greendemo.test"],
 ];
 
 const errText = (e?: string | null) => e === "RATE_LIMIT" ? "Too many tries. Please wait 15 minutes and try again." : e;
@@ -36,7 +37,7 @@ export default function LoginForm({ demo, client }: { demo: boolean; client?: st
           <div><b style={{ fontFamily: "var(--display)", fontSize: 17 }}>Skyland Plaza</b><div className="hint">Managed by Building Mgt AI</div></div>
         </div>
         {demo && client ? <>
-          <h2 style={{ fontSize: 22, marginBottom: 4 }}>Your sustainability demo</h2>
+          <h2 style={{ fontSize: 22, marginBottom: 4 }}>{client === "bcda" ? "Your building management demo" : "Your sustainability demo"}</h2>
           <p className="hint" style={{ margin: "0 0 14px" }}>One tap to open it. No password needed.</p>
           <div className="roles">{GREEN.filter(([k]) => k === client).map(([, i, t, s, e]) => (
             <button type="button" key={e} className="role green-role" disabled={!!busy} onClick={() => go(e, "Skyland2026!")}>
