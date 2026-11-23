@@ -1166,3 +1166,14 @@ model EntryFlag {
   @@index([status])
   @@index([person])
 }
+
+/// Phone remote for the 3D city map demo: the big screen polls, the phone posts commands. Expires after 3 hours.
+model MapRemote {
+  code      String   @id
+  seq       Int      @default(0)
+  cmd       String   @default("")
+  state     String   @default("")
+  expiresAt DateTime
+  createdBy String?
+  updatedAt DateTime @updatedAt
+}

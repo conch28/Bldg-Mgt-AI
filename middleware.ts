@@ -45,4 +45,4 @@ export default withAuth((req) => {
   },
 });
 
-export const config = { matcher: ["/((?!api/auth|api/cron|api/paymongo|api/messenger|api/viber|p/|j/|api/health|api/log-error|login|privacy|offline|_next|favicon.ico|robots.txt|manifest.webmanifest|sw.js|icons).*)"] };
+export const config = { matcher: ["/((?!api/auth|api/cron|api/paymongo|api/messenger|api/viber|p/|j/|api/health|api/log-error|api/remote/|r/|login|privacy|offline|_next|favicon.ico|robots.txt|manifest.webmanifest|sw.js|icons).*)"] };

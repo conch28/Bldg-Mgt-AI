@@ -10,36 +10,42 @@ const mw = (kw: number) => (kw >= 1000 ? `${n1(kw / 1000)} MW` : `${n0(kw)} kW`)
 const pesoBig = (v: number) => (v >= 1e9 ? `₱${n1(v / 1e9)}B` : v >= 1e6 ? `₱${n1(v / 1e6)}M` : `₱${n0(v)}`);
 
 export type DaySavings = { peso: number; kwh: number; m3: number; co2: number };
-export type Hud = "intro" | "power" | "water" | "leak" | "data" | "before" | "replay" | "end";
+export type Hud = "intro" | "power" | "water" | "leak" | "data" | "before" | "storm" | "future" | "replay" | "end";
 export type Chapter = { id: Hud; kicker: string; title: string; text: string; say: string; dur: number };
 
-export function chapters(o: { buildings: number; day: DaySavings; leak?: CityAlert }): Chapter[] {
+export function chapters(o: { buildings: number; day: DaySavings; leak?: CityAlert; client?: { hello: string; close: string } }): Chapter[] {
   const month = o.day.peso * 30;
   return [
     { id: "intro", kicker: "New Clark City → Clark Freeport", title: "One city. Every building. One AI.", dur: 11,
       text: `${o.buildings ? n0(o.buildings) : "Thousands of"} real buildings across 20 km, watched for every kilowatt and every litre.`,
-      say: "This is New Clark City, all the way down to Clark Freeport. Every building you see is real map data, and our AI watches every kilowatt and every litre." },
+      say: (o.client ? o.client.hello + " " : "This is New Clark City, all the way down to Clark Freeport. ") + "Every building you see is real map data, and our AI watches every kilowatt and every litre." },
     { id: "power", kicker: "Power, live", title: "6:30 PM. The evening peak.", dur: 11,
       text: "Glowing lines show power streaming along the main roads. Buildings pulsing red are using the most for their size.",
       say: "Six thirty in the evening, the peak, when power is dirtiest and most expensive. The glowing lines show power streaming into every district, and the buildings pulsing red are using the most." },
-    { id: "water", kicker: "Water, live", title: "Every litre, traced.", dur: 10,
+    { id: "water", kicker: "Water, live", title: "Every litre, traced.", dur: 9,
       text: "Blue streams follow supply through the city. The darkest buildings drink the most per square metre.",
       say: "Water tells its own story. Blue streams trace supply through the city, and the darkest buildings drink the most for their size." },
     { id: "leak", kicker: "Found in real time", title: o.leak ? o.leak.title : "A leak, caught at night", dur: 15,
       text: o.leak ? `${o.leak.where}. ${o.leak.detail}` : "Night flow that should be zero is not.",
       say: "Two in the morning. The pool should be still, but the AI sees water flowing all night at the Aquatics Center. It pinpoints the stuck valve and sends the contractor a ticket, before anyone wakes up." },
-    { id: "data", kicker: "Always up to date", title: "A fresh reading every 15 minutes.", dur: 13,
+    { id: "data", kicker: "Always up to date", title: "A fresh reading every 15 minutes.", dur: 12,
       text: "Clip-on meters and LoRaWAN radios report every 15 minutes. Guard photos and bills, read by AI, fill the gaps. Every reading is checked, and urgent alerts land within 5 minutes.",
       say: "How does it stay current? Clip-on meters and low-power radios report every fifteen minutes. Guard photos and bills, read by AI, fill the gaps. Every reading is checked, and urgent alerts land within five minutes." },
     { id: "before", kicker: "Before and after", title: "Now let the AI take over.", dur: 13,
       text: "Pre-cooling on solar, lights off on schedule, chillers tuned. Watch the heat drop away.",
       say: "Now watch what happens when the AI takes over. Pre-cooling on solar, lights off on schedule, chillers tuned. The heat drops away, and so does the bill." },
-    { id: "replay", kicker: "30 days, replayed", title: "Savings that stack up.", dur: 13,
+    { id: "storm", kicker: "Typhoon drill · simulation", title: "Ready before the storm.", dur: 14,
+      text: "Rain, lightning and rising water in the lowlands. Red buildings sit below the flood line. The AI fuels generators, parks lifts up high and messages every resident.",
+      say: "And when a typhoon comes, the AI gets ready two days early. Generators fuelled, lifts parked above the water, cars moved out of basements, and every resident messaged. The red buildings are the ones that would flood." },
+    { id: "future", kicker: "The city in 2030 · sample plan", title: "Then we build the future.", dur: 12,
+      text: "Solar on almost half the roofs, EV chargers along every main road, and twenty-five thousand new trees.",
+      say: "And then we build the future. By 2030, solar on almost half the roofs, chargers along every main road, and twenty-five thousand new trees." },
+    { id: "replay", kicker: "30 days, replayed", title: "Savings that stack up.", dur: 11,
       text: "Day after day, building by building.",
       say: "Thirty days later, the savings have stacked up, day after day, building by building." },
     { id: "end", kicker: "Building Management AI", title: `${pesoBig(month)} a month back to Clark.`, dur: 0,
       text: `${n0(o.day.co2 * 30)} t of CO₂ avoided, ${n0(o.day.m3 * 30)} m³ of water saved, and cooler, happier residents.`,
-      say: "Lower bills, cleaner air, steady water, and happier residents. That's Building Management AI, for New Clark City and Clark." },
+      say: o.client ? o.client.close + " That's Building Management AI." : "Lower bills, cleaner air, steady water, and happier residents. That's Building Management AI, for New Clark City and Clark." },
   ];
 }
 
