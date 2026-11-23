@@ -76,6 +76,8 @@ const ALL: Item[] = [
   { href: "/green", label: "Sustainability demos", group: "Demo views", icon: "bolt", roles: B },
   { href: "/green/clark", label: "Clark command center", group: "Overview", icon: "pulse", roles: ["CLIENT"] },
   { href: "/green/clark", label: "Clark command center", group: "Demo views", icon: "pulse", roles: B },
+  { href: "/green/map", label: "3D city map", group: "Overview", icon: "box", roles: ["CLIENT"] },
+  { href: "/green/map", label: "3D city map", group: "Demo views", icon: "box", roles: B },
   { href: "/investor", label: "Investor view", group: "Demo views", icon: "bars", roles: ["ADMIN"] },
   { href: "/building-owner", label: "Building owner view", group: "Demo views", icon: "home", roles: ["ADMIN"] },
 ];
@@ -87,7 +89,7 @@ const TABS: Record<string, Tab[]> = {
   ADMIN: [{ href: "/today", label: "Today", icon: "check" }, { href: "/work-orders", label: "Requests", icon: "wrench" }, { href: "/comms", label: "Updates", icon: "mega" }, { href: "/admin/users", label: "Users", icon: "users" }],
   INVESTOR: [{ href: "/investor", label: "Snapshot", icon: "bars" }, { href: "/account", label: "Account", icon: "users" }],
   LANDLORD: [{ href: "/building-owner", label: "Overview", icon: "pulse" }, { href: "/account", label: "Account", icon: "users" }],
-  CLIENT: [{ href: "/green", label: "Green", icon: "bolt" }, { href: "/green/clark", label: "Clark", icon: "pulse" }, { href: "/account", label: "Account", icon: "users" }],
+  CLIENT: [{ href: "/green", label: "Green", icon: "bolt" }, { href: "/green/clark", label: "Clark", icon: "pulse" }, { href: "/green/map", label: "3D map", icon: "box" }, { href: "/account", label: "Account", icon: "users" }],
   GUARD: [{ href: "/frontdesk", label: "Front desk", icon: "shield" }, { href: "/rounds", label: "Rounds", icon: "route" }, { href: "/tasks", label: "Tasks", icon: "vote" }, { href: "/sos", label: "SOS", icon: "alert" }],
 };
 
