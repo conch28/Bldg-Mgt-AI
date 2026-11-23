@@ -4,6 +4,7 @@ import {
   ASSUMPTIONS, ALERTS, BUILDINGS, CITY_KPIS, DISTRICTS, MEASURES, MONTHS, MONTHLY_TARGET, PHASES, STAGES,
   type Alert, type DistrictKey, type Measure, type Metering, type Stage,
   cityDay, districtTotals, liveOf, manilaClock, paybackMonths, pesoYr, ranked,
+  DATA_COSTS, DATA_SCALE, PIPELINE, SOURCES, healthOf, type Health,
 } from "@/lib/clark";
 
 const n0 = (v: number) => Math.round(v).toLocaleString("en-PH");
@@ -19,7 +20,7 @@ const METER_COST: Record<Metering, string> = {
 };
 const tone = (vs: number) => (vs <= -8 ? "#2f8a4e" : vs <= -5 ? "#0d8a84" : vs <= -2 ? "#c07a12" : "#c2412d");
 const mapHref = (focus: string, alert?: string) => `/green/map?focus=${focus}${alert ? `&alert=${alert}` : ""}`;
-const SECTIONS = [["live", "Live"], ["goals", "City goals"], ["alerts", "Alerts"], ["buildings", "Buildings"], ["pipeline", "Savings pipeline"], ["savings", "Savings to date"], ["rollout", "Monitoring rollout"]] as const;
+const SECTIONS = [["live", "Live"], ["goals", "City goals"], ["alerts", "Alerts"], ["buildings", "Buildings"], ["pipeline", "Savings pipeline"], ["savings", "Savings to date"], ["data", "Data health"], ["rollout", "Monitoring rollout"]] as const;
 
 export default function ClarkCommand({ now0, briefing, aiWritten }: { now0: number; briefing: string; aiWritten: boolean }) {
   const [now, setNow] = useState(now0);
@@ -271,6 +272,8 @@ export default function ClarkCommand({ now0, briefing, aiWritten }: { now0: numb
         </div>
       </section>
 
+      <DataHealth />
+
       <section id="cc-rollout" className="grid g-7-5">
         <div className="card">
           <h3>How we monitor Clark cheaply and fast</h3>
@@ -370,3 +373,84 @@ function MonthBars() {
   );
 }
 
+
+const H_CLS: Record<Health["status"], string> = { "On time": "t-ok", Late: "t-warn", Estimated: "t-acc", Offline: "t-bad", "Not metered": "t-mut" };
+const ago = (m: number) => (m < 60 ? `${m} min ago` : m < 2880 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`);
+
+function DataHealth() {
+  const [all, setAll] = useState(false);
+  const rows = BUILDINGS.map((b) => ({ b, h: healthOf(b) }));
+  const live = rows.filter((r) => r.b.meter !== "Bills only");
+  const fresh = live.filter((r) => r.h.lastMin <= 2 * SOURCES.find((s) => s.key === r.b.meter)!.every).length;
+  const comp = live.reduce((s, r) => s + r.h.complete, 0) / live.length;
+  const issues = rows.filter((r) => r.h.issue);
+  const list = all ? rows : issues;
+  const pilot = DATA_COSTS.reduce((s, c) => s + c.pilot, 0), city = DATA_COSTS.reduce((s, c) => s + c.city, 0);
+  return (
+    <section id="cc-data" className="card">
+      <div className="cardhead"><div><h3>Data health: is every meter in, on time?</h3><div className="hint">Meters report every 15 minutes and urgent alerts arrive within 5. Anything late, missing or doubtful turns into a named task, so the numbers on this page can be trusted.</div></div></div>
+      <div className="grid g4" style={{ gap: 10 }}>
+        <Mini k="Meters on time" v={`${fresh} of ${live.length}`} d="reported within 2 intervals" good={fresh / live.length > 0.9} />
+        <Mini k="Readings received, last 24 h" v={`${n1(comp)}%`} d="target 98%+ a month" good={comp >= 98} />
+        <Mini k="Data checks today" v={n0(DATA_SCALE.pilotDevices * DATA_SCALE.readingsPerDay)} d={`readings from ${DATA_SCALE.pilotDevices} devices, all auto-checked`} />
+        <Mini k="Running cost" v={`${peso(pilot)}/mo`} d={`≈ ${peso(pilot / DATA_SCALE.pilotDevices)} per device; city-wide ≈ ${peso(city)}/mo`} />
+      </div>
+
+      <div className="cc-pipe" aria-label="How a reading gets from the meter to this screen">
+        {PIPELINE.map((p, i) => (
+          <div key={p.t} className="cc-pstep"><span aria-hidden="true">{p.icon}</span><b>{i + 1}. {p.t}</b><small>{p.d}</small></div>
+        ))}
+      </div>
+
+      <div className="row" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
+        <b>{all ? "Every building" : `${issues.length} things to fix or watch`}</b>
+        <span className="row" style={{ gap: 6 }}>
+          <button type="button" className={"chip" + (!all ? " on" : "")} onClick={() => setAll(false)}>Needs attention</button>
+          <button type="button" className={"chip" + (all ? " on" : "")} onClick={() => setAll(true)}>All buildings</button>
+        </span>
+      </div>
+      <div className="cc-scroll">
+        <table>
+          <thead><tr><th>Building</th><th>Source</th><th>Status</th><th className="r">Last reading</th><th className="r">Complete 24 h</th><th>Device</th><th>What happens next</th></tr></thead>
+          <tbody>
+            {list.map(({ b, h }) => (
+              <tr key={b.id}>
+                <td><b>{b.name}</b><div className="hint">{DISTRICTS.find((d) => d.key === b.district)!.name}</div></td>
+                <td><span className="tag t-mut">{b.meter}</span><div className="hint">every {SOURCES.find((s) => s.key === b.meter)!.every >= 1440 ? (b.meter === "Bills only" ? "month" : "day") : `${SOURCES.find((s) => s.key === b.meter)!.every} min`}</div></td>
+                <td><span className={"tag " + H_CLS[h.status]}>{h.status}</span></td>
+                <td className="r num">{ago(h.lastMin)}</td>
+                <td className="r num">{b.meter === "Bills only" ? "—" : `${n1(h.complete)}%`}</td>
+                <td className="hint">{h.battery ? `🔋 ${h.battery} V` : ""}{h.signal ? ` · 📶 ${h.signal}` : ""}{!h.battery && !h.signal ? (b.meter === "AI photo reads" ? "Guard's phone" : b.meter === "Bills only" ? "Bill upload" : "Wired gateway") : ""}</td>
+                <td style={{ minWidth: 240 }}>{h.issue ? <><b style={{ fontSize: 13 }}>{h.issue}</b><div className="hint">{h.fix}</div></> : <span className="hint">Nothing. Reporting normally.</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="grid g2" style={{ gap: 16, marginTop: 14 }}>
+        <div>
+          <b>How each source is checked</b>
+          <table style={{ marginTop: 6 }}>
+            <tbody>
+              {SOURCES.map((s) => (
+                <tr key={s.key}><td><b>{s.key}</b><div className="hint">{s.how}</div></td><td className="hint">{s.check}<div>Arrives: {s.latency}</div></td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <b>Monthly running cost (assumed)</b>
+          <table style={{ marginTop: 6 }}>
+            <thead><tr><th>Item</th><th className="r">Pilot, 33 bldgs</th><th className="r">City, ~1,000</th></tr></thead>
+            <tbody>
+              {DATA_COSTS.map((c) => <tr key={c.item}><td>{c.item}</td><td className="r num">{peso(c.pilot)}</td><td className="r num">{peso(c.city)}</td></tr>)}
+              <tr><td><b>Total</b></td><td className="r num"><b>{peso(pilot)}</b></td><td className="r num"><b>{peso(city)}</b></td></tr>
+            </tbody>
+          </table>
+          <div className="hint" style={{ marginTop: 6 }}>City-wide ≈ {n0(DATA_SCALE.cityDevices)} devices × 96 readings a day ≈ {n1((DATA_SCALE.cityDevices * 96) / 1e6)} million readings a day, about 10 GB a year once compressed. Hardware is a one-time cost, listed under Monitoring rollout.</div>
+        </div>
+      </div>
+    </section>
+  );
+}

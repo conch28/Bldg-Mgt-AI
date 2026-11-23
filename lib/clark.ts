@@ -241,3 +241,62 @@ export const CITY_KPIS: CityKpi[] = [
   { group: "Buildings", icon: "🏅", k: "Green-rated floor area (BERDE / EDGE / LEED)", v: "31%", target: "60%", pct: 52, trend: "+4 buildings this year", why: "Ratings need 12 months of metered data, which the command center already collects." },
   { group: "Climate", icon: "🌡️", k: "CO₂ per resident and worker", v: "2.1 t/yr", target: "1.5 t by 2030", pct: 71, trend: "−7% since Jun", why: "One number for the whole city that rolls up power, fuel and waste." },
 ];
+
+// ---------- Data health: is every meter reporting, on time, and can we trust it? ----------
+// Decisions (Marc, 2026-11-23): 15-minute readings with critical alerts within 5 minutes; data on our own
+// Supabase Postgres with time-series tables plus an open LoRaWAN network server. Sample data below.
+export type SourceKind = { key: Metering; every: number; how: string; latency: string; check: string };
+/** Expected reading interval (minutes) and path for each way a building is metered. */
+export const SOURCES: SourceKind[] = [
+  { key: "Modbus gateway", every: 15, how: "Gateway reads existing digital meters and BMS, pushes over 4G or fibre", latency: "< 1 min", check: "Main meter vs sum of sub-meters within ±5%" },
+  { key: "CT clamp + LoRaWAN", every: 15, how: "Clamp meter sends over LoRaWAN to the zone gateways", latency: "< 1 min", check: "Matches utility bill within ±2% each month" },
+  { key: "Pulse reader + LoRaWAN", every: 15, how: "Reader on the water meter's pulse output, LoRaWAN", latency: "< 1 min", check: "Night flow and daily total vs same weekday" },
+  { key: "Camera OCR reader", every: 60, how: "Battery camera reads the dial hourly; AI reads the digits", latency: "~2 min", check: "AI confidence 90%+, else a person checks the photo" },
+  { key: "AI photo reads", every: 1440, how: "Guard photographs the meter on rounds; AI reads it", latency: "same day", check: "Reading must go up and stay within the usual daily range" },
+  { key: "Bills only", every: 43200, how: "Monthly bill uploaded; AI extracts kWh, kW, power factor, m³", latency: "monthly", check: "Bill vs last 12 months and vs metered total" },
+];
+export const sourceOf = (m: Metering) => SOURCES.find((s) => s.key === m)!;
+
+export type Health = { id: string; status: "On time" | "Late" | "Estimated" | "Offline" | "Not metered"; lastMin: number; complete: number; battery?: number; signal?: string; issue?: string; fix?: string };
+// Hand-set exceptions; every other building reports cleanly.
+const EXC: Record<string, Omit<Health, "id">> = {
+  "crs-sch": { status: "Offline", lastMin: 26 * 60, complete: 58, battery: 2.9, signal: "—", issue: "Water reader silent for 26 hours, battery low", fix: "Field tech swaps the battery today; AI fills the gap from similar school days, marked estimated" },
+  "res-w": { status: "Late", lastMin: 31 * 60, complete: 88, issue: "Yesterday's guard photo read missed on the night round", fix: "Reminder sent to the guard; escalates to the supervisor after 2 hours" },
+  "air-cg": { status: "Estimated", lastMin: 15, complete: 96.2, battery: 3.5, signal: "Weak", issue: "3 readings lost to weak LoRaWAN signal near the cold store", fix: "Gaps filled automatically; add a small repeater or move the antenna (₱6k)" },
+  "com-bpo2": { status: "Late", lastMin: 26 * 60, complete: 91, issue: "AI could not read a blurry meter photo (confidence 71%)", fix: "Sent to the night supervisor to re-take; camera reader recommended (₱6k)" },
+  "ind-tire": { status: "On time", lastMin: 4, complete: 99.4, issue: "Sub-meters add up to 93% of the main meter", fix: "An unmetered load exists (likely the new compressor line); add one CT clamp" },
+  "hot-3": { status: "On time", lastMin: 22, complete: 98.9, battery: 3.4, signal: "Good", issue: "Camera reader battery forecast: 6 weeks left", fix: "Battery swap scheduled with the next visit" },
+  "ind-gar": { status: "Not metered", lastMin: 9 * 1440, complete: 100, issue: "Bills only. October bill uploaded; November bill due in 7 days", fix: "Phase 2: clamp meter on the main incomer (₱12k)" },
+  "com-park": { status: "Not metered", lastMin: 12 * 1440, complete: 100, issue: "Bills only", fix: "Phase 2: clamp meter on the main incomer (₱12k)" },
+};
+export function healthOf(b: CBldg): Health {
+  if (EXC[b.id]) return { id: b.id, ...EXC[b.id] };
+  const s = sourceOf(b.meter);
+  const n = idSeed(b.id);
+  const lastMin = Math.max(1, Math.round((noise(n) * s.every) / 1.5));
+  const complete = s.every >= 1440 ? 100 : Math.round((99 + noise(n + 7) * 0.95) * 10) / 10;
+  const radio = b.meter.includes("LoRaWAN") || b.meter === "Camera OCR reader";
+  return { id: b.id, status: "On time", lastMin, complete, battery: radio ? Math.round((3.5 + noise(n + 3) * 0.15) * 100) / 100 : undefined, signal: radio ? (noise(n + 5) > 0.3 ? "Good" : "Fair") : undefined };
+}
+
+/** How a reading travels from the meter to the screen. */
+export const PIPELINE = [
+  { t: "Meters", d: "Clamp meters, pulse and camera readers, Modbus gateways, guard photos, bills", icon: "📟" },
+  { t: "Network", d: "LoRaWAN gateways across the zone (open network server); NB-IoT SIMs where there's no gateway; 4G or fibre for Modbus", icon: "📡" },
+  { t: "Ingest", d: "One webhook receives every reading, stamps Manila time, drops duplicates and replays anything sent late", icon: "📥" },
+  { t: "Check", d: "Range, spikes, meters going backwards, clock drift, sub-meters vs main, AI confidence on photos", icon: "🧪" },
+  { t: "Store", d: "Supabase Postgres time-series tables: 15-min raw for 2 years, hourly and daily roll-ups kept for good", icon: "🗄️" },
+  { t: "Fill & flag", d: "Short gaps filled from similar days and marked estimated; long gaps open a field ticket", icon: "🩹" },
+  { t: "Use", d: "Live dashboard, AI alerts within 5 min, monthly savings proof (estimated data kept out)", icon: "📊" },
+];
+
+/** Monthly running cost of the data system, in pesos (assumed). Pilot = 33 buildings; city = ~1,000 buildings. */
+export const DATA_COSTS = [
+  { item: "Supabase database (time-series tables, backups)", pilot: 1_500, city: 12_000 },
+  { item: "LoRaWAN network server on a small cloud server", pilot: 1_000, city: 3_000 },
+  { item: "Internet for LoRaWAN gateways (fibre or 4G)", pilot: 6_000, city: 45_000 },
+  { item: "NB-IoT SIMs for isolated meters", pilot: 1_000, city: 18_000 },
+  { item: "AI reading of meter photos and bills", pilot: 1_500, city: 15_000 },
+  { item: "Alerts by SMS, Viber and email", pilot: 800, city: 6_000 },
+];
+export const DATA_SCALE = { pilotDevices: 180, cityDevices: 6000, readingsPerDay: 96 };
