@@ -2,13 +2,14 @@ import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 import { authSecret } from "@/lib/env";
 
-const VIEWERS = ["INVESTOR", "LANDLORD"];
-const VIEWER_HOME: Record<string, string> = { INVESTOR: "/investor", LANDLORD: "/building-owner" };
+const VIEWERS = ["INVESTOR", "LANDLORD", "CLIENT"];
+const VIEWER_HOME: Record<string, string> = { INVESTOR: "/investor", LANDLORD: "/building-owner", CLIENT: "/green" };
 const viewerOk = (role: string, path: string) => /^\/($|account(\/|$)|consent(\/|$))/.test(path) || path === VIEWER_HOME[role] || path.startsWith(VIEWER_HOME[role] + "/");
 
 const RULES: [RegExp, string[]][] = [
   [/^\/investor(\/|$)/, ["INVESTOR", "ADMIN"]],
   [/^\/building-owner(\/|$)/, ["LANDLORD", "BOARD", "ADMIN"]],
+  [/^\/green(\/|$)/, ["CLIENT", "BOARD", "MANAGER", "ADMIN"]],
   [/^\/admin/, ["ADMIN"]],
   [/^\/(board|scorecard|happiness)/, ["BOARD", "MANAGER", "ADMIN"]],
   [/^\/(work-orders|collections|comms|maintenance|vendors|reports)/, ["BOARD", "MANAGER", "ADMIN"]],

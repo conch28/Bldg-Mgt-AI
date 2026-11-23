@@ -84,12 +84,12 @@ export async function requireRole(...roles: Role[]): Promise<SessionUser> {
 }
 
 /** Read-only demo viewers. They see one summary page each and can't change anything. */
-export const VIEWERS: Role[] = ["INVESTOR", "LANDLORD"];
+export const VIEWERS: Role[] = ["INVESTOR", "LANDLORD", "CLIENT"];
 /** Everyone who uses the building day to day (all roles except the read-only viewers). */
 export const PEOPLE: Role[] = ["OWNER", "BOARD", "MANAGER", "ADMIN", "GUARD"];
 
 export const homeFor = (role: Role) =>
-  role === "OWNER" ? "/home" : role === "BOARD" ? "/board" : role === "GUARD" ? "/frontdesk" : role === "INVESTOR" ? "/investor" : role === "LANDLORD" ? "/building-owner" : "/today";
+  role === "OWNER" ? "/home" : role === "BOARD" ? "/board" : role === "GUARD" ? "/frontdesk" : role === "INVESTOR" ? "/investor" : role === "LANDLORD" ? "/building-owner" : role === "CLIENT" ? "/green" : "/today";
 
 export async function audit(userId: string | null, action: string, detail?: string) {
   await prisma.auditLog.create({ data: { userId, action, detail } });
