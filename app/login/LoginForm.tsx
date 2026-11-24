@@ -23,16 +23,18 @@ const GREEN: [string, string, string, string, string][] = [
 
 const errText = (e?: string | null) => e === "RATE_LIMIT" ? "Too many tries. Please wait 15 minutes and try again." : e;
 
-export default function LoginForm({ demo, client }: { demo: boolean; client?: string }) {
+export default function LoginForm({ demo, client, noAuto }: { demo: boolean; client?: string; noAuto?: boolean }) {
+  // The BCDA link is shared on its own, so it carries no Skyland branding and no link to the other demos.
+  const bcda = demo && client === "bcda";
   const [err, setErr] = useState(""); const [busy, setBusy] = useState<string | null>(null);
   // Client links (/login?client=bcda) open straight into that demo, no tap needed.
   const auto = useRef(false);
   useEffect(() => {
-    if (!demo || !client || auto.current) return;
+    if (!demo || !client || noAuto || auto.current) return;
     const row = GREEN.find(([k]) => k === client);
     if (row) { auto.current = true; go(row[4], ""); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [demo, client]);
+  }, [demo, client, noAuto]);
   async function go(e: string, p: string) {
     setBusy(e); setErr("");
     const r = await signIn("credentials", { email: e, password: p, redirect: false });
@@ -43,7 +45,8 @@ export default function LoginForm({ demo, client }: { demo: boolean; client?: st
       <div className="box">
         <div className="brand" style={{ padding: 0, marginBottom: 20 }}>
           <div className="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M4 21V8l6-4v17M10 21V10l8 3v8M2 21h20" /></svg></div>
-          <div><b style={{ fontFamily: "var(--display)", fontSize: 17 }}>Skyland Plaza</b><div className="hint">Managed by Building Mgt AI</div></div>
+          {bcda ? <div><b style={{ fontFamily: "var(--display)", fontSize: 17 }}>NGAC Government Building</b><div className="hint">BCDA · New Clark City</div></div>
+            : <div><b style={{ fontFamily: "var(--display)", fontSize: 17 }}>Skyland Plaza</b><div className="hint">Managed by Building Mgt AI</div></div>}
         </div>
         {demo && client ? <>
           <h2 style={{ fontSize: 22, marginBottom: 4 }}>{client === "bcda" ? "Your building management demo" : "Your sustainability demo"}</h2>
@@ -54,7 +57,7 @@ export default function LoginForm({ demo, client }: { demo: boolean; client?: st
             </button>))}
           </div>
           {err && <div className="err" style={{ marginTop: 12 }}>{err}</div>}
-          <p className="hint" style={{ marginTop: 14 }}><a href="/login">See all demos</a></p>
+          {!bcda && <p className="hint" style={{ marginTop: 14 }}><a href="/login">See all demos</a></p>}
         </> : demo ? <>
           <h2 style={{ fontSize: 22, marginBottom: 4 }}>Try the demo</h2>
           <p className="hint" style={{ margin: "0 0 14px" }}>Tap who you want to be. No password needed.</p>
