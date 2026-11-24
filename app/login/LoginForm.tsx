@@ -1,6 +1,6 @@
 "use client";
 import { signIn } from "next-auth/react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { requestCode, type CodeState } from "./actions";
 
@@ -11,9 +11,10 @@ const ACCOUNTS: [string, string, string, string][] = [
   ["🛡️", "Lobby guard", "Visitor passes, SOS alerts, moves", "guard@skyland.test"],
   ["🏢", "Building owner", "Occupancy, income, spending, asset health", "building@skyland.test"],
   ["📈", "Investor", "Business snapshot: unit economics and results", "investor@skyland.test"],
+  ["🔑", "Admin", "Everything: users, data, settings, all demo views", "admin@skyland.test"],
 ];
 
-// Sustainability demos for prospective clients (see lib/green.ts). Same demo password.
+// Client demos (lib/green.ts, lib/bcda.ts). On the demo site nobody needs a password.
 const GREEN: [string, string, string, string, string][] = [
   ["ncc", "🌿", "New Clark City", "Green smart city: cut power and water, track carbon", "ncc@greendemo.test"],
   ["pax", "🔬", "Pax Silica hub", "AI-native industrial hub: data hall PUE, water reuse, solar", "pax@greendemo.test"],
@@ -24,6 +25,14 @@ const errText = (e?: string | null) => e === "RATE_LIMIT" ? "Too many tries. Ple
 
 export default function LoginForm({ demo, client }: { demo: boolean; client?: string }) {
   const [err, setErr] = useState(""); const [busy, setBusy] = useState<string | null>(null);
+  // Client links (/login?client=bcda) open straight into that demo, no tap needed.
+  const auto = useRef(false);
+  useEffect(() => {
+    if (!demo || !client || auto.current) return;
+    const row = GREEN.find(([k]) => k === client);
+    if (row) { auto.current = true; go(row[4], ""); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demo, client]);
   async function go(e: string, p: string) {
     setBusy(e); setErr("");
     const r = await signIn("credentials", { email: e, password: p, redirect: false });
@@ -40,7 +49,7 @@ export default function LoginForm({ demo, client }: { demo: boolean; client?: st
           <h2 style={{ fontSize: 22, marginBottom: 4 }}>{client === "bcda" ? "Your building management demo" : "Your sustainability demo"}</h2>
           <p className="hint" style={{ margin: "0 0 14px" }}>One tap to open it. No password needed.</p>
           <div className="roles">{GREEN.filter(([k]) => k === client).map(([, i, t, s, e]) => (
-            <button type="button" key={e} className="role green-role" disabled={!!busy} onClick={() => go(e, "Skyland2026!")}>
+            <button type="button" key={e} className="role green-role" disabled={!!busy} onClick={() => go(e, "")}>
               <span className="ri" aria-hidden="true">{i}</span><span style={{ flex: 1 }}><b>{t}</b><small>{busy === e ? "Opening…" : s}</small></span><span aria-hidden="true" className="chev">›</span>
             </button>))}
           </div>
@@ -50,18 +59,18 @@ export default function LoginForm({ demo, client }: { demo: boolean; client?: st
           <h2 style={{ fontSize: 22, marginBottom: 4 }}>Try the demo</h2>
           <p className="hint" style={{ margin: "0 0 14px" }}>Tap who you want to be. No password needed.</p>
           <div className="roles">{ACCOUNTS.map(([i, t, s, e]) => (
-            <button type="button" key={e} className="role" disabled={!!busy} onClick={() => go(e, "Skyland2026!")}>
+            <button type="button" key={e} className="role" disabled={!!busy} onClick={() => go(e, "")}>
               <span className="ri" aria-hidden="true">{i}</span><span style={{ flex: 1 }}><b>{t}</b><small>{busy === e ? "Opening…" : s}</small></span><span aria-hidden="true" className="chev">›</span>
             </button>))}
           </div>
-          <div className="hint" style={{ margin: "18px 0 8px", fontWeight: 600 }}>Sustainability demos</div>
+          <div className="hint" style={{ margin: "18px 0 8px", fontWeight: 600 }}>Client demos</div>
           <div className="roles">{GREEN.map(([, i, t, s, e]) => (
-            <button type="button" key={e} className="role green-role" disabled={!!busy} onClick={() => go(e, "Skyland2026!")}>
+            <button type="button" key={e} className="role green-role" disabled={!!busy} onClick={() => go(e, "")}>
               <span className="ri" aria-hidden="true">{i}</span><span style={{ flex: 1 }}><b>{t}</b><small>{busy === e ? "Opening…" : s}</small></span><span aria-hidden="true" className="chev">›</span>
             </button>))}
           </div>
           {err && <div className="err" style={{ marginTop: 12 }}>{err}</div>}
-          <details className="signin-more"><summary>Sign in with email instead</summary><PasswordForm busy={busy} go={go} /></details>
+          <details className="signin-more"><summary>Sign in with your own email</summary><EmailOnlyForm busy={busy} go={go} /></details>
           <details className="signin-more"><summary>Try the one-time code sign-in</summary><div style={{ marginTop: 12 }}><CodeForm /></div></details>
         </> : <>
           <h2 style={{ fontSize: 22, marginBottom: 4 }}>Sign in</h2>
@@ -113,6 +122,18 @@ function PasswordForm({ busy, go }: { busy: string | null; go: (e: string, p: st
     <form onSubmit={(e) => { e.preventDefault(); go(email, password); }} style={{ marginTop: 12 }}>
       <div className="field"><label htmlFor="email">Email</label><input id="email" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
       <div className="field"><label htmlFor="password">Password</label><input id="password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+      <button className="btn pri" style={{ width: "100%", justifyContent: "center" }} disabled={!!busy}>{busy ? "Signing in…" : "Sign in"}</button>
+    </form>
+  );
+}
+
+/** Demo site only: no password, the email alone opens the account. */
+function EmailOnlyForm({ busy, go }: { busy: string | null; go: (e: string, p: string) => void }) {
+  const [email, setEmail] = useState("");
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); go(email, ""); }} style={{ marginTop: 12 }}>
+      <div className="field"><label htmlFor="email">Email</label><input id="email" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" /></div>
+      <p className="hint" style={{ margin: "0 0 10px" }}>This is a demo, so no password is needed.</p>
       <button className="btn pri" style={{ width: "100%", justifyContent: "center" }} disabled={!!busy}>{busy ? "Signing in…" : "Sign in"}</button>
     </form>
   );

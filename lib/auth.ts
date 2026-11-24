@@ -21,15 +21,19 @@ export const authOptions: NextAuthOptions = {
       credentials: { email: { label: "Email", type: "email" }, password: { label: "Password", type: "password" } },
       async authorize(creds, req) {
         const email = creds?.email?.toLowerCase().trim();
-        if (!email || !creds?.password) return null;
+        // Demo site (DEMO_MODE): no passwords. An email alone signs in to any active account.
+        const passwordless = demoMode();
+        if (!email || (!creds?.password && !passwordless)) return null;
         const ip = clientIp(req?.headers as any);
         const [a, b] = await Promise.all([rateLimit(`pw:${email}`, demoMode() ? 60 : 8, 900), rateLimit(`pw-ip:${ip}`, demoMode() ? 200 : 30, 900)]);
         if (!a.ok || !b.ok) throw new Error("RATE_LIMIT");
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user || !user.active) return null;
-        const ok = await bcrypt.compare(creds.password, user.passwordHash);
-        if (!ok) { await audit(user.id, "login_failed", "Wrong password"); return null; }
-        await prisma.auditLog.create({ data: { userId: user.id, action: "login", detail: "password" } });
+        if (!passwordless) {
+          const ok = await bcrypt.compare(creds!.password, user.passwordHash);
+          if (!ok) { await audit(user.id, "login_failed", "Wrong password"); return null; }
+        }
+        await prisma.auditLog.create({ data: { userId: user.id, action: "login", detail: passwordless ? "demo, no password" : "password" } });
         return { id: user.id, email: user.email, name: user.name, role: user.role, buildingId: user.buildingId } as any;
       },
     }),

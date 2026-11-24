@@ -135,7 +135,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {overdue > 0 && <Link href="/tasks" className="overdue-banner"><b>{overdue} record{overdue > 1 ? "s" : ""} overdue.</b> Tap to enter {overdue > 1 ? "them" : "it"} now.</Link>}
           {children}
         </div>
-        <Suspense fallback={null}><Tour uid={u.id} role={u.role} /></Suspense>
+        <Suspense fallback={null}><Tour uid={u.id} role={bcdaClient ? "CLIENT_BCDA" : u.role} /></Suspense>
       </div>
     </Providers>
   );
