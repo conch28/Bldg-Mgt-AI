@@ -8,6 +8,7 @@ import { DPO } from "@/lib/privacy";
 import { requestPrivacy } from "./actions";
 import { linkUrls } from "@/lib/channels";
 
+export const metadata = { title: "Account" };
 export const dynamic = "force-dynamic";
 export default async function Account({ searchParams }: { searchParams: { sent?: string; error?: string } }) {
   const u = await requireRole();

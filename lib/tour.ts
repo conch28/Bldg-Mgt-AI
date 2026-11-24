@@ -47,6 +47,11 @@ export const CARDS: Record<string, Card[]> = {
     { icon: "⚡", t: "Watch a day go by", b: "The live flow shows sun, battery and grid hour by hour. Flip any AI action to see the savings change." },
     { icon: "💚", t: "People first", b: "Savings are the proof. The goal is cooler, happier homes and workplaces, with friendly nudges and Green Points." },
   ],
+  CLIENT_BCDA: [
+    { icon: "🏛️", t: "Welcome po!", b: "This is a building management demo for the NGAC Government Building, with sample data. It tracks what BCDA reports on: uptime, cost, compliance and the COA trail." },
+    { icon: "🧊", t: "Tap the building", b: "Switch lenses for uptime, energy, assets, leases and safety. Tap any bay to see what is happening there." },
+    { icon: "📑", t: "Audit-ready by default", b: "Every purchase keeps its RA 12009 steps, and the COA audit pack downloads in one tap." },
+  ],
   GUARD: [
     { icon: "👋", t: "Welcome to the front desk", b: "This is your guard station. The big buttons at the bottom are all you need." },
     { icon: "📷", t: "Check every guest", b: "Scan the guest's QR or type the 6-letter code. Make sure their face matches the photo on the pass." },
