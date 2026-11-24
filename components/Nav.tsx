@@ -28,7 +28,7 @@ export function Icon({ name, size = 17 }: { name: string; size?: number }) {
 }
 const Logo = () => <div className="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M4 21V8l6-4v17M10 21V10l8 3v8M2 21h20M7 10v.01M7 13v.01M7 16v.01M14 15v.01M14 18v.01" /></svg></div>;
 
-export default function Nav({ items, tabs, user, building }: { items: NavItem[]; tabs: Tab[]; user: { name: string; role: string }; building: string }) {
+export default function Nav({ items, tabs, user, building, signOutTo = "/login" }: { items: NavItem[]; tabs: Tab[]; user: { name: string; role: string }; building: string; signOutTo?: string }) {
   const path = usePathname();
   const [more, setMore] = useState(false);
   useEffect(() => setMore(false), [path]);
@@ -59,7 +59,7 @@ export default function Nav({ items, tabs, user, building }: { items: NavItem[];
         <div className="userbox" style={{ marginTop: "auto" }}>
           <ThemeSwitch />
           <span><b>{user.name}</b><br />{user.role === "LANDLORD" ? "building owner" : user.role === "CLIENT" ? "client demo" : user.role.toLowerCase()} · <Link href="/account" style={{ color: "inherit" }}>Account</Link></span>
-          <button className="signout" onClick={() => signOut({ callbackUrl: "/login" })}>Sign out</button>
+          <button className="signout" onClick={() => signOut({ callbackUrl: signOutTo })}>Sign out</button>
         </div>
       </aside>
 
@@ -89,7 +89,7 @@ export default function Nav({ items, tabs, user, building }: { items: NavItem[];
               <ThemeSwitch />
               <div className="row" style={{ justifyContent: "space-between" }}>
                 <span className="hint"><b style={{ color: "var(--fg)" }}>{user.name}</b> · {user.role.toLowerCase()}</span>
-                <span className="row"><Link href="/account" className="btn sm">Account</Link><button className="btn sm" onClick={() => signOut({ callbackUrl: "/login" })}>Sign out</button></span>
+                <span className="row"><Link href="/account" className="btn sm">Account</Link><button className="btn sm" onClick={() => signOut({ callbackUrl: signOutTo })}>Sign out</button></span>
               </div>
             </div>
           </div>

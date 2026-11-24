@@ -129,7 +129,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <Providers>
       <a href="#main" className="sr-only">Skip to content</a>
       <div className="app">
-        <Nav items={items} tabs={tabs} user={{ name: u.name, role: u.role }} building={bcdaClient ? BCDA_NAME : u.role === "CLIENT" ? SITES[siteForEmail(u.email) ?? "ncc"].name : b?.name ?? ""} />
+        <Nav items={items} tabs={tabs} user={{ name: u.name, role: u.role }} signOutTo={bcdaClient ? "/bcda?out=1" : "/login"} building={bcdaClient ? BCDA_NAME : u.role === "CLIENT" ? SITES[siteForEmail(u.email) ?? "ncc"].name : b?.name ?? ""} />
         <div className="main" id="main">
           {isStaff && sos > 0 && <Link href="/sos" className="sos-banner" role="alert"><b>SOS</b> {sos} emergency alert{sos > 1 ? "s" : ""} need{sos > 1 ? "" : "s"} a response now. Tap to open.</Link>}
           {overdue > 0 && <Link href="/tasks" className="overdue-banner"><b>{overdue} record{overdue > 1 ? "s" : ""} overdue.</b> Tap to enter {overdue > 1 ? "them" : "it"} now.</Link>}
