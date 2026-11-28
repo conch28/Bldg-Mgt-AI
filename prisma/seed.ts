@@ -6,6 +6,7 @@
  */
 import { PrismaClient, Priority, WOStatus, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { seedV2 } from "./seed-v2";
 import { seedV3 } from "./seed-v3";
 import { seedV4 } from "./seed-v4";
@@ -47,7 +48,7 @@ const METHODS = ["GCash","GCash","GCash","Maya","Bank transfer","Card","Cash"];
 async function ensureViewers() {
   const building = await prisma.building.findFirst({ orderBy: { createdAt: "asc" } });
   if (!building) return;
-  const hash = await bcrypt.hash(process.env.SEED_PASSWORD ?? "Skyland2026!", 10);
+  const hash = await bcrypt.hash(crypto.randomBytes(24).toString("hex"), 10); // nobody signs in with a password
   const viewers: [string, string, Role][] = [["investor@skyland.test", "Demo Investor", "INVESTOR"], ["building@skyland.test", "Building Owner", "LANDLORD"],
     ...CLIENT_LOGINS.map((c): [string, string, Role] => [c.email, c.name, "CLIENT"])];
   for (const [email, name, role] of viewers) {
@@ -98,8 +99,8 @@ async function main() {
     console.log(`Kept account ${k.email}`);
   }
 
-  const password = process.env.SEED_PASSWORD ?? "Skyland2026!";
-  const hash = await bcrypt.hash(password, 10);
+  // No passwords: demo accounts open with one tap, real ones with a one-time code. The column is required, so store a random hash.
+  const hash = await bcrypt.hash(crypto.randomBytes(24).toString("hex"), 10);
   const mk = (email: string, name: string, role: Role, phone?: string) =>
     prisma.user.create({ data: { email, name, role, phone, passwordHash: hash, buildingId: building.id } });
   const admin = await mk("admin@skyland.test", "Building Mgt AI Admin", "ADMIN");
