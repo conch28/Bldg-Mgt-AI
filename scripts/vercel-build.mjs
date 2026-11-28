@@ -20,6 +20,7 @@ if (!env.DATABASE_URL) {
   console.warn("\n⚠ No database connected yet. Building without migrations.\n  In Vercel: Storage → Create Database → Supabase → Connect, then Redeploy.\n");
 } else {
   run("npx prisma migrate deploy");
+  run("npx tsx prisma/legal-sync.ts"); // legal library + template house rules for Ask AI
   if (env.DEMO_MODE === "1") { env.SEED_ALLOW_PRODUCTION = "1"; env.SEED_IF_EMPTY = "1"; run("npx tsx prisma/seed.ts"); }
   else run("npx tsx prisma/bootstrap.ts"); // production: building + first admin only, never sample data
 }

@@ -40,6 +40,7 @@ cp .env.example .env          # fill DATABASE_URL, DIRECT_URL, NEXTAUTH_SECRET
 npm install
 npx prisma migrate deploy     # create tables
 npm run db:seed               # load Skyland sample data
+npm run db:legal              # load the legal library and template house rules for Ask AI
 npm run dev                   # http://localhost:3000
 ```
 
