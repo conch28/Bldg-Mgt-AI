@@ -23,7 +23,9 @@ const GREEN: [string, string, string, string, string][] = [
 
 const errText = (e?: string | null) => e === "RATE_LIMIT" ? "Too many tries. Please wait 15 minutes and try again." : e;
 
-export default function LoginForm({ demo, client, noAuto }: { demo: boolean; client?: string; noAuto?: boolean }) {
+export default function LoginForm({ demo, client, noAuto, next }: { demo: boolean; client?: string; noAuto?: boolean; next?: string }) {
+  // Only same-site paths, so a link can't bounce people to another site after sign-in.
+  const dest = next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
   // The BCDA link is shared on its own, so it carries no Skyland branding and no link to the other demos.
   const bcda = demo && client === "bcda";
   const [err, setErr] = useState(""); const [busy, setBusy] = useState<string | null>(null);
@@ -38,7 +40,7 @@ export default function LoginForm({ demo, client, noAuto }: { demo: boolean; cli
   async function go(e: string) {
     setBusy(e); setErr("");
     const r = await signIn("credentials", { email: e, redirect: false });
-    if (r?.ok) window.location.href = "/"; else { setBusy(null); setErr(r?.error === "RATE_LIMIT" ? errText(r.error)! : "That email doesn't match an active account."); }
+    if (r?.ok) window.location.href = dest; else { setBusy(null); setErr(r?.error === "RATE_LIMIT" ? errText(r.error)! : "That email doesn't match an active account."); }
   }
   return (
     <div className="login">
