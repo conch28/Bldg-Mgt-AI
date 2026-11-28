@@ -1,7 +1,6 @@
 import { PageHead } from "@/components/ui";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import ChangePassword from "@/components/ChangePassword";
 import SubmitButton from "@/components/SubmitButton";
 import { fmtDate } from "@/lib/format";
 import { DPO } from "@/lib/privacy";
@@ -47,7 +46,6 @@ export default async function Account({ searchParams }: { searchParams: { sent?:
         </details>
         {reqs.length > 0 && <div className="list" style={{ marginTop: 12 }}>{reqs.map((r) => <div className="li" key={r.id}><div style={{ flex: 1 }}><b>{r.kind === "DELETE" ? "Delete my data" : r.kind === "CORRECT" ? "Fix my data" : "Copy of my data"}</b><div className="hint">{fmtDate(r.createdAt)}{r.reply ? ` · ${r.reply}` : ""}</div></div><span className={"tag " + (r.status === "OPEN" ? "t-warn" : "t-ok")}>{r.status === "OPEN" ? "in progress" : r.status.toLowerCase()}</span></div>)}</div>}
       </div>
-      <div className="card" style={{ maxWidth: 560 }}><h3>Change password</h3><p className="hint" style={{ marginTop: 0 }}>Optional. You can always sign in with a one-time code sent to your email or phone.</p><ChangePassword /></div>
     </main>
   </>);
 }

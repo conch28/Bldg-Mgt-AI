@@ -266,7 +266,7 @@ async function main() {
 
   await prisma.auditLog.create({ data: { userId: admin.id, action: "seed", detail: `Database seeded with Skyland sample data (${SEED_VERSION})` } });
   console.log(`Done. ${units.length} units, ${bills.length} bills, ${payments.length} payments.`);
-  console.log(`Logins (password: ${password}): admin@ manager@ president@ treasurer@ owner@ guard@ guard2@ building@ investor@ skyland.test`);
+  console.log(`Demo logins (one tap on the sign-in page, no password): admin@ manager@ president@ treasurer@ owner@ guard@ guard2@ building@ investor@ skyland.test`);
   void manager; void president; void treasurer;
 }
 
