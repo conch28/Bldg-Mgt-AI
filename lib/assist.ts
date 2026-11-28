@@ -7,7 +7,7 @@
 import { randomInt } from "crypto";
 import { z } from "zod";
 import { prisma } from "./db";
-import { audit, type SessionUser } from "./auth";
+import type { SessionUser } from "./auth";
 import { nowManila, fmtDateTime, fmtDate, TZ } from "./format";
 import { notifyUser } from "./comms";
 import { SLA_HOURS } from "./rounds";
@@ -29,6 +29,8 @@ export type AmenityOption = { id: string; name: string; openHour: number; closeH
 export const todayManila = () => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(nowManila());
 const ALPHA = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const newCode = () => Array.from({ length: 6 }, () => ALPHA[randomInt(ALPHA.length)]).join("");
+// Same as audit() in lib/auth, written here so seed scripts can import this file without Next.js.
+const audit = (userId: string, action: string, detail: string) => prisma.auditLog.create({ data: { userId, action, detail } });
 const ownerUnit = (userId: string) => prisma.unit.findFirst({ where: { ownerId: userId }, orderBy: { code: "asc" } });
 
 export async function amenityOptions(): Promise<AmenityOption[]> {
