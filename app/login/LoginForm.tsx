@@ -32,12 +32,12 @@ export default function LoginForm({ demo, client, noAuto }: { demo: boolean; cli
   useEffect(() => {
     if (!demo || !client || noAuto || auto.current) return;
     const row = GREEN.find(([k]) => k === client);
-    if (row) { auto.current = true; go(row[4], ""); }
+    if (row) { auto.current = true; go(row[4]); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demo, client, noAuto]);
-  async function go(e: string, p: string) {
+  async function go(e: string) {
     setBusy(e); setErr("");
-    const r = await signIn("credentials", { email: e, password: p, redirect: false });
+    const r = await signIn("credentials", { email: e, redirect: false });
     if (r?.ok) window.location.href = "/"; else { setBusy(null); setErr(r?.error === "RATE_LIMIT" ? errText(r.error)! : "That email doesn't match an active account."); }
   }
   return (
@@ -52,7 +52,7 @@ export default function LoginForm({ demo, client, noAuto }: { demo: boolean; cli
           <h2 style={{ fontSize: 22, marginBottom: 4 }}>{client === "bcda" ? "Your building management demo" : "Your sustainability demo"}</h2>
           <p className="hint" style={{ margin: "0 0 14px" }}>One tap to open it. No password needed.</p>
           <div className="roles">{GREEN.filter(([k]) => k === client).map(([, i, t, s, e]) => (
-            <button type="button" key={e} className="role green-role" disabled={!!busy} onClick={() => go(e, "")}>
+            <button type="button" key={e} className="role green-role" disabled={!!busy} onClick={() => go(e)}>
               <span className="ri" aria-hidden="true">{i}</span><span style={{ flex: 1 }}><b>{t}</b><small>{busy === e ? "Opening…" : s}</small></span><span aria-hidden="true" className="chev">›</span>
             </button>))}
           </div>
@@ -62,7 +62,7 @@ export default function LoginForm({ demo, client, noAuto }: { demo: boolean; cli
           <h2 style={{ fontSize: 22, marginBottom: 4 }}>Try the demo</h2>
           <p className="hint" style={{ margin: "0 0 14px" }}>Tap who you want to be. No password needed.</p>
           <div className="roles">{ACCOUNTS.map(([i, t, s, e]) => (
-            <button type="button" key={e} className="role" disabled={!!busy} onClick={() => go(e, "")}>
+            <button type="button" key={e} className="role" disabled={!!busy} onClick={() => go(e)}>
               <span className="ri" aria-hidden="true">{i}</span><span style={{ flex: 1 }}><b>{t}</b><small>{busy === e ? "Opening…" : s}</small></span><span aria-hidden="true" className="chev">›</span>
             </button>))}
           </div>
@@ -114,10 +114,10 @@ function CodeForm() {
 }
 
 /** Demo site only: no password, the email alone opens the account. */
-function EmailOnlyForm({ busy, go }: { busy: string | null; go: (e: string, p: string) => void }) {
+function EmailOnlyForm({ busy, go }: { busy: string | null; go: (e: string) => void }) {
   const [email, setEmail] = useState("");
   return (
-    <form onSubmit={(e) => { e.preventDefault(); go(email, ""); }} style={{ marginTop: 12 }}>
+    <form onSubmit={(e) => { e.preventDefault(); go(email); }} style={{ marginTop: 12 }}>
       <div className="field"><label htmlFor="email">Email</label><input id="email" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" /></div>
       <p className="hint" style={{ margin: "0 0 10px" }}>This is a demo, so no password is needed.</p>
       <button className="btn pri" style={{ width: "100%", justifyContent: "center" }} disabled={!!busy}>{busy ? "Signing in…" : "Sign in"}</button>
