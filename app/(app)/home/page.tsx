@@ -15,13 +15,13 @@ export const dynamic = "force-dynamic";
 
 const ACTIONS = [
   { href: "/report", icon: "wrench", t: "Report a problem", cls: "primary" },
+  { href: "/ask", icon: "spark", t: "Ask AI" },
   { href: "/my", icon: "card", t: "Pay dues" },
   { href: "/passes", icon: "pass", t: "Guest pass" },
   { href: "/amenities", icon: "cal", t: "Book amenity" },
   { href: "/property", icon: "key", t: "Rent or sell" },
   { href: "/moving", icon: "box", t: "Moving" },
   { href: "/community", icon: "store", t: "Marketplace" },
-  { href: "/ask", icon: "spark", t: "Ask AI" },
 ];
 
 const clip = (t: string) => (t.length > 170 ? t.slice(0, 170) + "…" : t);
@@ -77,7 +77,7 @@ export default async function Home({ searchParams }: { searchParams: { thanks?: 
       <main className="view">
         {searchParams.thanks && <div className="okmsg">{Number(searchParams.thanks) <= 2 ? "Salamat po for telling us. Your property manager will reach out to you today." : "Salamat po! Your feedback goes straight to the board."}</div>}
         {storm && <Link href="/typhoon" className="card storm-home" style={{ textDecoration: "none", color: "inherit" }}><span style={{ fontSize: 30 }} aria-hidden="true">{storm.phase === "CHECKIN" ? "🙋" : "🌀"}</span><div><b>{storm.phase === "CHECKIN" ? `${storm.name} has passed. Are you OK po? Tap to check in.` : `Typhoon mode is on for ${storm.name}.`}</b><div className="hint">{storm.phase === "CHECKIN" ? "One tap: Safe, Damage, or I need help." : "See what to do now, and move your car from B2 to B1 if you can."}</div></div></Link>}
-        <Tip id="owner-home" title="Need anything? Just tap Help.">Type it like you'd text a friend, in English or Taglish. Repairs become tickets automatically, and you'll get updates by SMS.</Tip>
+        <Tip id="owner-home" title="Need anything? Tap the smiling face, top right.">Type it like you'd text a friend, in English or Taglish. It can book the pool, make a guest pass or report a leak for you po. Everything else is under More.</Tip>
 
         <div className={"card status-card" + (due ? "" : " ok")}>
           <div><div className="k">{due ? (overdue ? "Overdue" : "Amount due") : "Dues"}</div><div className="v num">{due ? peso(due) : "All paid ✓"}</div>

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import ThemeSwitch from "./ThemeSwitch";
 
-export type NavItem = { href: string; label: string; group: string; icon: string; count?: number };
+export type NavItem = { href: string; label: string; group: string; icon: string; count?: number; kw?: string };
 export type Tab = { href: string; label: string; icon: string; count?: number };
 export const ICONS: Record<string, string> = {
   pulse: "M3 12h4l3-8 4 16 3-8h4", heart: "M12 21s-7.5-4.6-9.5-9.2C1 8.3 3.2 4.5 7 4.5c2.1 0 3.6 1.2 5 3 1.4-1.8 2.9-3 5-3 3.8 0 6 3.8 4.5 7.3C19.5 16.4 12 21 12 21z", bars: "M4 20V10M10 20V4M16 20v-7M22 20H2", medal: "M12 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10zM8.5 12.5 7 22l5-3 5 3-1.5-9.5",
@@ -21,17 +21,18 @@ export const ICONS: Record<string, string> = {
   store: "M3 9l2-5h14l2 5M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0zM5 13v8h14v-8M10 21v-5h4v5", alert: "M12 3l10 18H2zM12 10v5M12 18v.01",
   bolt: "M13 2L4 14h7l-1 8 9-12h-7z", storm: "M7 16a4 4 0 0 1-.6-7.96A6 6 0 0 1 18 9a4 4 0 0 1-1 7.9M13 12l-3 5h4l-3 5", route: "M6 19a2 2 0 1 0 0-.1M18 5a2 2 0 1 0 0-.1M6 17V9a3 3 0 0 1 3-3h3M18 7v8a3 3 0 0 1-3 3h-3",
   cart: "M3 4h2l2.4 11.2a1 1 0 0 0 1 .8h9.2a1 1 0 0 0 1-.8L20 8H6.2M9 20.5a1 1 0 1 0 0-.1M17 20.5a1 1 0 1 0 0-.1", bulb: "M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V16h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z",
-  layers: "M12 3l9 5-9 5-9-5zM3 13l9 5 9-5", cloud: "M7 18a4 4 0 0 1-.6-8A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9z", more: "M5 12v.01M12 12v.01M19 12v.01", x: "M6 6l12 12M18 6L6 18", tag: "M3 12V3h9l9 9-9 9zM7.5 7.5v.01", spark: "M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6",
+  layers: "M12 3l9 5-9 5-9-5zM3 13l9 5 9-5", cloud: "M7 18a4 4 0 0 1-.6-8A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9z", more: "M5 12v.01M12 12v.01M19 12v.01", x: "M6 6l12 12M18 6L6 18", tag: "M3 12V3h9l9 9-9 9zM7.5 7.5v.01", search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-5-5", spark: "M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6",
 };
 export function Icon({ name, size = 17 }: { name: string; size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={ICONS[name]} /></svg>;
 }
 const Logo = () => <div className="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M4 21V8l6-4v17M10 21V10l8 3v8M2 21h20M7 10v.01M7 13v.01M7 16v.01M14 15v.01M14 18v.01" /></svg></div>;
 
-export default function Nav({ items, tabs, user, building, signOutTo = "/login" }: { items: NavItem[]; tabs: Tab[]; user: { name: string; role: string }; building: string; signOutTo?: string }) {
+export default function Nav({ items, tabs, user, building, signOutTo = "/login", fold = [] }: { items: NavItem[]; tabs: Tab[]; user: { name: string; role: string }; building: string; signOutTo?: string; fold?: string[] }) {
   const path = usePathname();
   const [more, setMore] = useState(false);
-  useEffect(() => setMore(false), [path]);
+  const [q, setQ] = useState("");
+  useEffect(() => { setMore(false); setQ(""); }, [path]);
   useEffect(() => { document.body.style.overflow = more ? "hidden" : ""; }, [more]);
   const under = (href: string) => path === href || path.startsWith(href + "/");
   // The most specific matching link wins, so /green/clark lights up "Clark", not also "Green".
@@ -40,14 +41,40 @@ export default function Nav({ items, tabs, user, building, signOutTo = "/login" 
   const groups = [...new Set(items.map((i) => i.group))];
   const inTabs = tabs.some((t) => on(t.href));
   const moreCount = items.filter((i) => !tabs.some((t) => t.href === i.href)).reduce((s, i) => s + (i.count || 0), 0);
-  const list = (
+  // Search: type a word ("pass", "gym", "budget") and every matching page shows up, whatever section it lives in.
+  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const hits = words.length ? items.filter((i) => { const hay = `${i.label} ${i.group} ${i.kw ?? ""}`.toLowerCase(); return words.every((w) => hay.includes(w)); }) : [];
+  const link = (i: NavItem, cls = "nav") => (
+    <Link key={i.href + i.label} href={i.href} className={cls + (on(i.href) ? " on" : "")} aria-current={on(i.href) ? "page" : undefined}>
+      <span className="ni"><Icon name={i.icon} /></span><span className="nl">{i.label}</span>{i.count ? <span className="count" aria-label={`${i.count} need attention`}>{i.count}</span> : null}
+    </Link>
+  );
+  const search = (
+    <label className="navsearch">
+      <Icon name="search" size={16} />
+      <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a page" aria-label="Find a page" />
+    </label>
+  );
+  const results = <nav className="navgroup" aria-label="Search results">{hits.length ? hits.map((i) => link(i)) : <div className="hint" style={{ padding: "6px 10px" }}>Nothing matches “{q}”. Try the AI helper at the top right.</div>}</nav>;
+  // Desktop sidebar: main sections always open; secondary ones fold away until you need them.
+  const sideList = words.length ? results : (
+    <>{groups.map((g) => {
+      const gi = items.filter((i) => i.group === g);
+      if (!fold.includes(g)) return <nav className="navgroup" key={g} aria-label={g}><div className="lbl">{g}</div>{gi.map((i) => link(i))}</nav>;
+      const n = gi.reduce((s, i) => s + (i.count || 0), 0);
+      return (
+        <details className="navgroup fold" key={g} open={gi.some((i) => on(i.href)) || undefined}>
+          <summary className="lbl">{g}{n ? <span className="count">{n}</span> : null}</summary>
+          <nav aria-label={g}>{gi.map((i) => link(i))}</nav>
+        </details>
+      );
+    })}</>
+  );
+  // Phone "More" sheet: sections of big tiles, easy to scan with a thumb.
+  const sheetList = words.length ? results : (
     <>{groups.map((g) => (
-      <nav className="navgroup" key={g} aria-label={g}><div className="lbl">{g}</div>
-        {items.filter((i) => i.group === g).map((i) => (
-          <Link key={i.href} href={i.href} className={"nav" + (on(i.href) ? " on" : "")} aria-current={on(i.href) ? "page" : undefined}>
-            <Icon name={i.icon} />{i.label}{i.count ? <span className="count" aria-label={`${i.count} need attention`}>{i.count}</span> : null}
-          </Link>
-        ))}
+      <nav className="tilegroup" key={g} aria-label={g}><div className="lbl">{g}</div>
+        <div className="tiles">{items.filter((i) => i.group === g).map((i) => link(i, "tile"))}</div>
       </nav>
     ))}</>
   );
@@ -55,7 +82,8 @@ export default function Nav({ items, tabs, user, building, signOutTo = "/login" 
     <>
       <aside className="side">
         <Link href="/" className="brand" style={{ textDecoration: "none" }}><Logo /><div><b>Building Mgt AI</b><small>{building}</small></div></Link>
-        {list}
+        {items.length > 8 && search}
+        {sideList}
         <div className="userbox" style={{ marginTop: "auto" }}>
           <ThemeSwitch />
           <span><b>{user.name}</b><br />{user.role === "LANDLORD" ? "building owner" : user.role === "CLIENT" ? "client demo" : user.role.toLowerCase()} · <Link href="/account" style={{ color: "inherit" }}>Account</Link></span>
@@ -84,8 +112,10 @@ export default function Nav({ items, tabs, user, building, signOutTo = "/login" 
         <div className="sheet-wrap" onClick={() => setMore(false)}>
           <div className="sheet" id="more-sheet" role="dialog" aria-label="All pages" onClick={(e) => { e.stopPropagation(); if ((e.target as HTMLElement).closest("a")) setMore(false); }}>
             <div className="sheet-grip" />
-            {list}
+            {search}
+            {sheetList}
             <div className="sheet-foot">
+              <Link href={`${path}?tips=1`} className="btn sm" style={{ alignSelf: "flex-start" }}>💡 Tips for this screen</Link>
               <ThemeSwitch />
               <div className="row" style={{ justifyContent: "space-between" }}>
                 <span className="hint"><b style={{ color: "var(--fg)" }}>{user.name}</b> · {user.role.toLowerCase()}</span>

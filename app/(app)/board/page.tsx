@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import Tip from "@/components/Tip";
 import { PageHead, Kpi } from "@/components/ui";
+import { Icon } from "@/components/Nav";
 import { LineChart } from "@/components/charts";
 import { HappinessHero } from "@/components/Happiness";
 import BuildingTwin from "@/components/twin/BuildingTwin";
@@ -12,6 +13,7 @@ import { getWeather } from "@/lib/weather";
 import { WeatherStrip } from "@/components/Weather";
 import { controlFlags, savingsThisYear } from "@/lib/procurement";
 import { collectionTrend, overdueAccounts, slaStats, budgetFor, latestClosedPeriod } from "@/lib/metrics";
+import { allTasks, tasksFor } from "@/lib/duties";
 import { peso, pesoK, monthLabel, monthLong, fmtDateTime, nowManila, currentPeriod } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +28,9 @@ export default async function Board() {
     prisma.auditLog.findMany({ where: { action: { in: ["payment", "work_order", "booking", "reminder", "report", "resident follow-up", "announcement sent", "urgent alert"] } }, orderBy: { createdAt: "desc" }, take: 6, include: { user: true } }),
     prisma.bill.aggregate({ where: { period: currentPeriod() }, _sum: { amount: true, paid: true } }),
   ]);
-  const [twin, weather, flags, saved] = await Promise.all([buildingTwin(u.role), getWeather(), controlFlags(), savingsThisYear()]);
+  const [twin, weather, flags, saved, toSign, tasks] = await Promise.all([buildingTwin(u.role), getWeather(), controlFlags(), savingsThisYear(),
+    prisma.purchaseRequest.count({ where: { status: "PENDING", requestedBy: { not: u.id } } }), allTasks().catch(() => [])]);
+  const myOverdue = tasksFor(tasks, u.role).filter((t) => t.level >= 1).length;
   const last = trend.find((t) => t.period === closed);
   const first = trend[0];
   const overBudget = budget.lines.filter((l) => Number(l.actual) > Number(l.budget) * 1.02);
@@ -36,51 +40,56 @@ export default async function Board() {
     <>
       <PageHead title="Today at Skyland" sub={`Board view · ${nowManila().toLocaleDateString("en-PH", { timeZone: "Asia/Manila", dateStyle: "full" })}`} />
       <main className="view">
-        <Tip id="board-overview" title="Your building at a glance.">Green means on track, amber needs a look, red needs a decision. Tap any number to see the detail behind it.</Tip>
+        <Tip id="board-overview" title="Your building at a glance.">What needs you is at the top. Got a question about the law or the house rules? Tap the smiling face at the top right.</Tip>
         <HappinessHero />
-        {weather.risk !== "ok" && <WeatherStrip w={weather} />}
-        <BuildingTwin data={twin} staff={u.role !== "BOARD"} compact weather={weather} />
-        <div className="grid g4">
-          <Kpi k={`${monthLong(closed)} collections`} v={`${last?.rate.toFixed(1) ?? "–"}%`} d={first && last ? <span className={last.rate >= first.rate ? "up" : "down"}>{last.rate >= first.rate ? "▲" : "▼"} {Math.abs(last.rate - first.rate).toFixed(1)} pts in 12 months</span> : null} />
-          <Kpi k="Open work orders" v={openWO} d={<><span className="up">{sla.pct.toFixed(0)}% on time</span> · {escalated.length} escalated</>} />
-          <Kpi k="Overdue balances" v={pesoK(overdueTotal)} cls="amber" d={<span className="hint">{overdue.length} units</span>} />
-          <Kpi k={`${monthLabel(currentPeriod())} dues collected`} v={`${novPct.toFixed(0)}%`} d={<span className="hint">{peso(Number(nov._sum.paid ?? 0))} of {peso(Number(nov._sum.amount ?? 0))}</span>} />
-        </div>
-        <div className="grid g-7-5">
-          <div className="card">
-            <div className="cardhead"><div><span className="ai-badge">What needs attention</span><h3 style={{ marginTop: 6 }}>Board briefing</h3></div></div>
+        <div className="card">
+            <div className="cardhead"><div><span className="ai-badge">AI briefing</span><h3 style={{ marginTop: 6 }}>What needs you today</h3></div></div>
             <div className="list">
+              {toSign > 0 && <div className="li"><span className="dot" style={{ background: "var(--warn)" }} /><div><b>{toSign} spending request{toSign > 1 ? "s" : ""} waiting for your signature.</b> <Link href="/procurement" style={{ color: "var(--accent)" }}>Review and sign</Link></div></div>}
+              {myOverdue > 0 && <div className="li"><span className="dot" style={{ background: "var(--warn)" }} /><div><b>{myOverdue} record{myOverdue > 1 ? "s" : ""} overdue</b> from the team, escalated to the board. <Link href="/tasks" style={{ color: "var(--accent)" }}>See who owes what</Link></div></div>}
               {escalated.map((w) => (
                 <div className="li" key={w.id}><span className="dot" style={{ background: "var(--bad)" }} /><div><b>Escalated: {w.title}</b> ({w.location}). Opened {fmtDateTime(w.createdAt)}, assigned to {w.assignee ?? "manager"}. <Link href="/work-orders" style={{ color: "var(--accent)" }}>View</Link></div></div>
               ))}
               {overBudget.map((l) => (
                 <div className="li" key={l.id}><span className="dot" style={{ background: "var(--warn)" }} /><div><b>{l.category} was {((Number(l.actual) / Number(l.budget) - 1) * 100).toFixed(1)}% over budget in {monthLong(closed)}.</b> {l.note}</div></div>
               ))}
-              <div className="li"><span className="dot" style={{ background: "var(--ok)" }} /><div><b>{monthLabel(currentPeriod())} dues: {peso(Number(nov._sum.paid ?? 0))} collected so far ({novPct.toFixed(0)}%).</b> {overdue.filter((o) => o.days > 60).length} units are more than 60 days late, owing {peso(overdue.filter((o) => o.days > 60).reduce((s, o) => s + o.amount, 0))}.</div></div>
               {flags.length > 0 && <div className="li"><span className="dot" style={{ background: flags.some((f) => f.level === "high") ? "var(--bad)" : "var(--warn)" }} /><div><b>{flags.length} spending red flag{flags.length > 1 ? "s" : ""}</b>, {peso(flags.reduce((s, f) => s + f.atStake, 0))} at stake. Top: {flags[0].title}. <Link href="/procurement?tab=controls" style={{ color: "var(--accent)" }}>Review</Link></div></div>}
-              <div className="li"><span className="dot" style={{ background: "var(--ok)" }} /><div><b>{peso(saved.total)} saved this year</b> by choosing cheaper quotes and claiming warranties. <Link href="/advisor" style={{ color: "var(--accent)" }}>More ways to save</Link></div></div>
-              <div className="li"><span className="dot" style={{ background: "var(--accent)" }} /><div><b>{sla.closed} repairs closed in the last 30 days</b>, {sla.pct.toFixed(0)}% within deadline, average owner rating {sla.rating.toFixed(1)}/5.</div></div>
+              <div className="li good-news"><span className="dot" style={{ background: "var(--ok)" }} /><div><b>Good news:</b> {peso(saved.total)} saved this year (<Link href="/advisor" style={{ color: "var(--accent)" }}>more ways</Link>) · {sla.closed} repairs closed in 30 days, {sla.pct.toFixed(0)}% on time, rated {sla.rating.toFixed(1)}/5 · {monthLabel(currentPeriod())} dues {novPct.toFixed(0)}% collected, {overdue.filter((o) => o.days > 60).length} units over 60 days late.</div></div>
             </div>
           </div>
-          <div className="card">
-            <div className="cardhead"><div><h3>Collection rate, last 12 months</h3><div className="hint">Share of each month&apos;s dues paid by the due date</div></div></div>
-            <LineChart vals={trend.slice(0, -1).map((t) => t.rate)} labels={trend.slice(0, -1).map((t) => monthLabel(t.period))} min={76} max={100} fmt={(v) => v.toFixed(0) + "%"} />
+        <div className="board-quick">
+          {[["/procurement", "cart", "Approve spending", toSign], ["/reports", "bars", "Reports & AI board report", 0], ["/meetings", "cal", "Meetings & AGM", 0], ["/ask", "spark", "Ask AI", 0]].map(([h, i, t, n]) => (
+            <Link key={h as string} href={h as string} className="act"><span className="ti"><Icon name={i as string} /></span><b>{t}</b>{n ? <i className="badge">{n}</i> : null}</Link>))}
+        </div>
+        <div className="grid g4">
+          <Kpi k={`${monthLong(closed)} collections`} v={`${last?.rate.toFixed(1) ?? "–"}%`} d={first && last ? <span className={last.rate >= first.rate ? "up" : "down"}>{last.rate >= first.rate ? "▲" : "▼"} {Math.abs(last.rate - first.rate).toFixed(1)} pts in 12 months</span> : null} />
+          <Kpi k="Open work orders" v={openWO} d={<><span className="up">{sla.pct.toFixed(0)}% on time</span> · {escalated.length} escalated</>} />
+          <Kpi k="Overdue balances" v={pesoK(overdueTotal)} cls="amber" d={<span className="hint">{overdue.length} units</span>} />
+          <Kpi k={`${monthLabel(currentPeriod())} dues collected`} v={`${novPct.toFixed(0)}%`} d={<span className="hint">{peso(Number(nov._sum.paid ?? 0))} of {peso(Number(nov._sum.amount ?? 0))}</span>} />
+        </div>
+        {weather.risk !== "ok" && <WeatherStrip w={weather} />}
+        <BuildingTwin data={twin} staff={u.role !== "BOARD"} compact weather={weather} />
+        <details className="more-detail">
+          <summary><b>More detail</b><span className="hint">Collection trend, early warnings, repair leaderboard, recent activity</span></summary>
+          <div className="grid g2">
+            <div className="card">
+              <div className="cardhead"><div><h3>Collection rate, last 12 months</h3><div className="hint">Share of each month&apos;s dues paid by the due date</div></div></div>
+              <LineChart vals={trend.slice(0, -1).map((t) => t.rate)} labels={trend.slice(0, -1).map((t) => monthLabel(t.period))} min={76} max={100} fmt={(v) => v.toFixed(0) + "%"} />
+            </div>
+            <div className="card"><h3>Spending, {monthLong(closed)}</h3><div className="hint">{peso(budget.actual)} against a budget of {peso(budget.budget)} ({budget.variance >= 0 ? "+" : ""}{budget.variance.toFixed(1)}%)</div>
+              <div style={{ marginTop: 12 }}><Link className="btn pri" href="/reports">Open reports and AI board report</Link></div>
+            </div>
           </div>
-        </div>
-        <div className="grid g2">
-          <EarlyWarnings canAct={u.role !== "BOARD"} />
-          <FixLeaderboard />
-        </div>
-        <div className="grid g2">
+          <div className="grid g2">
+            <EarlyWarnings canAct={u.role !== "BOARD"} />
+            <FixLeaderboard />
+          </div>
           <div className="card"><h3>Recent activity</h3>
             <div className="list" style={{ marginTop: 6 }}>
               {recent.length ? recent.map((r) => <div className="li" key={r.id}><span className="dot" style={{ background: "var(--accent)" }} /><div><b>{r.user?.name ?? "System"}</b> · <span className="hint">{fmtDateTime(r.createdAt)}</span><div>{r.detail}</div></div></div>) : <div className="hint">Payments, tickets and bookings will appear here as they happen.</div>}
             </div>
           </div>
-          <div className="card"><h3>Spending, {monthLong(closed)}</h3><div className="hint">{peso(budget.actual)} against a budget of {peso(budget.budget)} ({budget.variance >= 0 ? "+" : ""}{budget.variance.toFixed(1)}%)</div>
-            <div style={{ marginTop: 12 }}><Link className="btn pri" href="/reports">Open reports and AI board report</Link></div>
-          </div>
-        </div>
+        </details>
       </main>
     </>
   );
