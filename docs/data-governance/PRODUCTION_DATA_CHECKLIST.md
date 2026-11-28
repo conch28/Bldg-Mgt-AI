@@ -3,7 +3,7 @@
 Before a building runs on the system. Each line is checked by a person and dated.
 
 ## Environment
-- [ ] Production instance is separate from the demo (own Vercel project and database, `DEMO_MODE` unset)
+- [ ] Production instance is separate from the demo (own Vercel project and database, `DEMO_MODE=0`)
 - [ ] No sample data: building and first admin created by `prisma/bootstrap.ts` only
 - [ ] Nightly encrypted backup running; a restore tested in the last 30 days
 - [ ] `CRON_SECRET` set so daily checks and reminders run
