@@ -4,6 +4,10 @@
 
 import * as THREE from "three";
 import { MapControls } from "three/examples/jsm/controls/MapControls.js";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { ORIGIN, type ChunkData, type TerrainData, type Concept } from "@/lib/nccCity";
 import type { GoogleTiles } from "./googleTiles";
 
@@ -26,7 +30,7 @@ export type CityScene = {
   setLabels(l: Label[]): void;
   setBeacons(b: Beacon[]): void;
   setOutlines(list: { p: number[]; color: string; dashed?: boolean; strong?: boolean }[]): void;
-  flyTo(x: number, z: number, dist?: number, y?: number): void;
+  flyTo(x: number, z: number, dist?: number, y?: number, dur?: number, pitch?: number): void;
   tour(stops: Stop[], onStop: (i: number) => void, onEnd: () => void): void;
   stopTour(): void;
   reset(): void;
@@ -35,6 +39,26 @@ export type CityScene = {
   heightAt(x: number, z: number): number;
   setLook(look: Look, google?: { key: string; onError: (msg: string) => void }): void;
   attributions(): string;
+  /** Glowing particles streaming along the main roads: power (amber/cyan) or water (blue). Illustrative routes. */
+  setFlow(kind: "power" | "water" | null): void;
+  /** Hot (red) buildings breathe with a soft glow. */
+  setPulse(on: boolean): void;
+  /** Cinematic descent from high above down to the home view. */
+  intro(dur?: number): void;
+  /** Slow orbit around the current target, radians per second (0 stops). */
+  setOrbit(speed: number): void;
+  /** An "AI scanning" ring that sweeps out across the city from the view centre. */
+  scan(color?: string): void;
+  /** Storm simulation: typhoon rain and lightning (level) with flood water (flood), or heatwave haze. Both 0..1. */
+  setWeather(w: "typhoon" | "heat" | null, level?: number, flood?: number): void;
+  /** Flood water height (m) for a level 0..1, so the page can mark buildings that would flood. */
+  floodY(level: number): number;
+  /** 2030 view: EV chargers and new trees spread in as t goes 0 → 1 (null hides them). */
+  setFuture(t: number | null): void;
+  /** Gold savings sparks rising off these points (x, y, z triplets). */
+  sparks(pts: number[], color?: string): void;
+  /** Bloom glow on lights, flows and beacons. */
+  setCinema(on: boolean): void;
   dispose(): void;
 };
 
@@ -87,8 +111,9 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
   };
   renderer.domElement.addEventListener("wheel", onWheel, { passive: false });
   let tourState: null | { stops: Stop[]; i: number; t: number; from: { p: THREE.Vector3; l: THREE.Vector3 }; onStop: (i: number) => void; onEnd: () => void } = null;
+  let orbit = 0;
   let flight: null | { t: number; dur: number; fromP: THREE.Vector3; fromL: THREE.Vector3; toP: THREE.Vector3; toL: THREE.Vector3; arc: number } = null;
-  controls.addEventListener("start", () => { flight = null; if (tourState) { const e = tourState.onEnd; tourState = null; e(); } });
+  controls.addEventListener("start", () => { flight = null; orbit = 0; if (tourState) { const e = tourState.onEnd; tourState = null; e(); } });
 
   // ---------- lights & sky ----------
   const hemi = new THREE.HemisphereLight(0xdfefff, 0x6b7a55, 1.0);
@@ -101,7 +126,7 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
   scene.add(stars);
 
   // shared uniforms for building shaders
-  const U = { uNight: { value: 0 }, uGlow: { value: 0 }, uWin: { value: 1 } };
+  const U = { uNight: { value: 0 }, uGlow: { value: 0 }, uWin: { value: 1 }, uPulse: { value: 0 }, uTime: { value: 0 } };
   function patch(m: THREE.Material) {
     m.onBeforeCompile = (s) => {
       Object.assign(s.uniforms, U);
@@ -112,7 +137,7 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
           wp4 = instanceMatrix * wp4; nn = mat3(instanceMatrix) * nn;
         #endif
         wp4 = modelMatrix * wp4; vWP = wp4.xyz; vNW = normalize(mat3(modelMatrix) * nn);`);
-      s.fragmentShader = "uniform float uNight;\nuniform float uGlow;\nuniform float uWin;\nvarying vec3 vWP;\nvarying vec3 vNW;\nfloat hh(vec2 p){return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5453);}\n" +
+      s.fragmentShader = "uniform float uNight;\nuniform float uGlow;\nuniform float uWin;\nuniform float uPulse;\nuniform float uTime;\nvarying vec3 vWP;\nvarying vec3 vNW;\nfloat hh(vec2 p){return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5453);}\n" +
         s.fragmentShader.replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
         if (abs(vNW.y) < 0.5 && uNight > 0.01) {
           float fy = vWP.y / 3.3; float fx = (vWP.x + vWP.z) / 3.1;
@@ -120,7 +145,11 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
           float lit = step(0.42, hh(vec2(floor(fy), floor(fx / 3.0)) + floor(vWP.xz / 40.0)));
           totalEmissiveRadiance += vec3(1.0, 0.76, 0.42) * win * lit * uNight * uWin * 1.1;
         }
-        totalEmissiveRadiance += diffuseColor.rgb * uGlow;`);
+        totalEmissiveRadiance += diffuseColor.rgb * uGlow;
+        if (uPulse > 0.01) {
+          float hot = clamp((diffuseColor.r - diffuseColor.b) * 1.8 - 0.25, 0.0, 1.0);
+          totalEmissiveRadiance += diffuseColor.rgb * uPulse * hot * (0.45 + 0.45 * sin(uTime * 3.4 + (vWP.x + vWP.z) * 0.003));
+        }`);
     };
     m.customProgramCacheKey = () => "cityPatch";
   }
@@ -233,7 +262,7 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
     (plain.material as THREE.MeshLambertMaterial).color.set(look === "map" ? "#9fb07f" : "#6f7652");
     plain.visible = !g;
     if (google) google.group.visible = g;
-    carPts.visible = !g;
+    carPts.visible = !g && !flowKind;
     // On Google 3D our boxes would hide the real buildings: show them only as a see-through data layer.
     for (const m of [boxMat, polyMat]) { m.transparent = g; m.opacity = g ? 0.62 : 1; m.depthWrite = !g; m.needsUpdate = true; }
     for (const o of pickables) o.visible = !g || dataMode;
@@ -467,6 +496,209 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
     pos.needsUpdate = true;
   }
 
+  // ---------- flows (power / water streaming along the main roads) ----------
+  let flowKind: "power" | "water" | null = null;
+  let flowParts: { p: number; s: number; v: number; dir: number }[] = [];
+  const flowGeo = new THREE.BufferGeometry();
+  const flowMat = new THREE.PointsMaterial({ size: 26, map: dot, vertexColors: true, transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, sizeAttenuation: true, fog: false });
+  const flowPts = new THREE.Points(flowGeo, flowMat); flowPts.frustumCulled = false; flowPts.renderOrder = 5; flowPts.visible = false; scene.add(flowPts);
+  let pipes: THREE.LineSegments | null = null;
+  function buildPipes() {
+    const v: number[] = [];
+    for (const p of paths) for (let k = 2; k < p.pts.length; k += 2) {
+      const ax = p.pts[k - 2], az = p.pts[k - 1], bx = p.pts[k], bz = p.pts[k + 1];
+      v.push(ax, heightAt(ax, az) + 5, az, bx, heightAt(bx, bz) + 5, bz);
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(v, 3));
+    pipes = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: "#ffb347", transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, fog: false }));
+    pipes.renderOrder = 4; pipes.frustumCulled = false; scene.add(pipes);
+  }
+  function setFlow(kind: "power" | "water" | null) {
+    flowKind = kind;
+    if (kind && paths.length) {
+      if (!pipes) buildPipes();
+      const total = paths.reduce((s, p) => s + p.len, 0);
+      const N = mobile ? 1100 : 3200;
+      if (flowParts.length !== N) {
+        flowParts = [];
+        for (const [pi, p] of paths.entries()) {
+          const n = Math.round((p.len / total) * N); for (let k = 0; k < n; k++) flowParts.push({ p: pi, s: Math.random() * p.len, v: 160 + Math.random() * 140, dir: Math.random() < 0.5 ? 1 : -1 });
+        }
+        flowGeo.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(flowParts.length * 3), 3));
+        flowGeo.setAttribute("color", new THREE.Float32BufferAttribute(new Float32Array(flowParts.length * 3), 3));
+      }
+      const col = flowGeo.attributes.color as THREE.BufferAttribute;
+      const cs = kind === "power" ? ["#ffb347", "#ffd27a", "#4fe3ff", "#ff8a3d"] : ["#3fb6ff", "#7fd8ff", "#1e90ff", "#b5ecff"];
+      flowParts.forEach((_, i) => { tmpC.set(cs[i % cs.length]); col.setXYZ(i, tmpC.r, tmpC.g, tmpC.b); });
+      col.needsUpdate = true;
+      (pipes!.material as THREE.LineBasicMaterial).color.set(kind === "power" ? "#ffb347" : "#3fb6ff");
+    }
+    flowPts.visible = !!kind; if (pipes) pipes.visible = !!kind;
+    carPts.visible = !kind && !(look === "google" && google != null);
+  }
+  function moveFlows(dt: number, camD: number) {
+    if (!flowKind) return;
+    const pos = flowGeo.attributes.position as THREE.BufferAttribute | undefined; if (!pos) return;
+    flowMat.size = THREE.MathUtils.clamp(camD / 120, 10, 90);
+    for (let i = 0; i < flowParts.length; i++) {
+      const c = flowParts[i], p = paths[c.p];
+      c.s += c.v * dt * c.dir;
+      if (c.s > p.len) c.s -= p.len; if (c.s < 0) c.s += p.len;
+      let k = 1; while (k < p.cum.length - 1 && p.cum[k] < c.s) k++;
+      const seg = p.cum[k] - p.cum[k - 1] || 1, t = (c.s - p.cum[k - 1]) / seg;
+      const x = p.pts[(k - 1) * 2] + (p.pts[k * 2] - p.pts[(k - 1) * 2]) * t, z = p.pts[(k - 1) * 2 + 1] + (p.pts[k * 2 + 1] - p.pts[(k - 1) * 2 + 1]) * t;
+      pos.setXYZ(i, x, heightAt(x, z) + 7, z);
+    }
+    pos.needsUpdate = true;
+  }
+
+  // ---------- AI scan sweep ----------
+  const scanGeo = new THREE.RingGeometry(0.985, 1, 160).rotateX(-Math.PI / 2);
+  const scans: { m: THREE.Mesh; t: number }[] = [];
+  function scan(color = "#5ef0dc") {
+    const m = new THREE.Mesh(scanGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, side: THREE.DoubleSide, fog: false }));
+    m.position.set(controls.target.x, heightAt(controls.target.x, controls.target.z) + 30, controls.target.z); m.renderOrder = 6;
+    scene.add(m); scans.push({ m, t: 0 });
+  }
+  function moveScans(dt: number, camD: number) {
+    for (let i = scans.length - 1; i >= 0; i--) {
+      const s = scans[i]; s.t += dt / 3.6;
+      const r = 40 + Math.pow(s.t, 0.8) * Math.max(6000, camD * 2.2);
+      s.m.scale.set(r, 1, r); (s.m.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 1 - s.t);
+      if (s.t >= 1) { scene.remove(s.m); (s.m.material as THREE.Material).dispose(); scans.splice(i, 1); }
+    }
+  }
+
+  // ---------- weather: typhoon rain + flood, heatwave haze (simulation) ----------
+  let weather: "typhoon" | "heat" | null = null, wLevel = 0, wShown = 0, fLevel = 0, fShown = 0, flash = 0, nextFlash = 3, lastHour = 13;
+  const hs = Float32Array.from(T.h).sort();
+  const hq = (q: number) => hs[Math.min(hs.length - 1, Math.floor(q * hs.length))];
+  const floodLo = hq(0.015), floodHi = hq(0.2);
+  /** Water surface height for a flood level 0..1 (the lowest fifth of the land floods at 1). */
+  const floodY = (l: number) => floodLo + (floodHi - floodLo) * l;
+  const flood = new THREE.Mesh(new THREE.PlaneGeometry(W, (nz - 1) * step).rotateX(-Math.PI / 2),
+    new THREE.MeshPhongMaterial({ color: "#3d7fae", emissive: "#0b2a44", specular: "#cfe8ff", shininess: 90, transparent: true, opacity: 0.72, depthWrite: false }));
+  flood.position.set(x0 + W / 2, floodLo - 5, z0 + ((nz - 1) * step) / 2); flood.visible = false; flood.renderOrder = 2; scene.add(flood);
+  const RAIN = mobile ? 2200 : 6500;
+  const rainOff = new Float32Array(RAIN * 3); for (let i = 0; i < rainOff.length; i++) rainOff[i] = Math.random() * 2 - 1;
+  const rainGeo = new THREE.BufferGeometry(); rainGeo.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(RAIN * 6), 3));
+  const rain = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color: "#b9d4ff", transparent: true, opacity: 0.38, depthWrite: false, fog: false }));
+  rain.frustumCulled = false; rain.visible = false; rain.renderOrder = 7; scene.add(rain);
+  const MOTES = mobile ? 500 : 1400;
+  const moteOff = new Float32Array(MOTES * 3); for (let i = 0; i < moteOff.length; i++) moteOff[i] = Math.random() * 2 - 1;
+  const moteGeo = new THREE.BufferGeometry(); moteGeo.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(MOTES * 3), 3));
+  const moteMat = new THREE.PointsMaterial({ color: "#ff9a3d", map: dot, size: 30, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+  const motes = new THREE.Points(moteGeo, moteMat); motes.frustumCulled = false; motes.visible = false; scene.add(motes);
+  const STORM = new THREE.Color("#27303b"), HAZE = new THREE.Color("#e9a15c"), FLASH = new THREE.Color("#e8eeff");
+  function setWeather(w: "typhoon" | "heat" | null, level = 1, floodLevel = 0) {
+    weather = w; wLevel = w ? THREE.MathUtils.clamp(level, 0, 1) : 0; fLevel = w === "typhoon" ? THREE.MathUtils.clamp(floodLevel, 0, 1) : 0;
+    rain.visible = w === "typhoon"; motes.visible = w === "heat"; flood.visible = w === "typhoon";
+    if (!w) { wShown = 0; fShown = 0; flash = 0; }
+    setHour(lastHour);
+  }
+  function moveWeather(dt: number, camD: number) {
+    if (!weather) return;
+    wShown += (wLevel - wShown) * Math.min(1, dt * 1.5);
+    const R = THREE.MathUtils.clamp(camD * 0.9, 500, 14000), tx = controls.target.x, tz = controls.target.z, ty = heightAt(tx, tz);
+    if (weather === "typhoon") {
+      fShown += (fLevel - fShown) * Math.min(1, dt * 1.2); flood.position.y = floodY(fShown);
+      const pos = rainGeo.attributes.position as THREE.BufferAttribute, len = R * 0.045, fall = dt * (1.1 + wShown);
+      for (let i = 0; i < RAIN; i++) {
+        let y = rainOff[i * 3 + 1] - fall; if (y < -1) y += 2; rainOff[i * 3 + 1] = y;
+        const x = tx + rainOff[i * 3] * R, z = tz + rainOff[i * 3 + 2] * R, yy = ty + (y + 1) * R * 0.55;
+        pos.setXYZ(i * 2, x, yy, z); pos.setXYZ(i * 2 + 1, x - len * 0.35, yy + len, z - len * 0.1);
+      }
+      pos.needsUpdate = true;
+      (rain.material as THREE.LineBasicMaterial).opacity = 0.12 + 0.36 * wShown;
+      nextFlash -= dt;
+      if (nextFlash <= 0 && wShown > 0.35) { flash = 1; nextFlash = 2.5 + Math.random() * 6; }
+      if (flash > 0) { flash = Math.max(0, flash - dt * 3.2); setHour(lastHour); }
+    } else {
+      const pos = moteGeo.attributes.position as THREE.BufferAttribute;
+      for (let i = 0; i < MOTES; i++) {
+        let y = moteOff[i * 3 + 1] + dt * 0.08; if (y > 1) y -= 2; moteOff[i * 3 + 1] = y;
+        const x = tx + moteOff[i * 3] * R + Math.sin(y * 9 + i) * R * 0.01, z = tz + moteOff[i * 3 + 2] * R;
+        pos.setXYZ(i, x, heightAt(x, z) + 10 + (y + 1) * R * 0.12, z);
+      }
+      pos.needsUpdate = true;
+      moteMat.size = THREE.MathUtils.clamp(camD / 90, 12, 120); moteMat.opacity = 0.2 + 0.45 * wShown;
+    }
+  }
+
+  // ---------- 2030: solar roofs (painted by the page), EV chargers and new trees ----------
+  let futureT = 0, evGeo: THREE.BufferGeometry | null = null, treeGeo: THREE.BufferGeometry | null = null, evN = 0, treeN = 0;
+  const evMat = new THREE.PointsMaterial({ color: "#3ff2ff", map: dot, size: 40, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+  const treeMat = new THREE.PointsMaterial({ map: dot, size: 22, vertexColors: true, transparent: true, depthWrite: false, alphaTest: 0.05 });
+  const evPts = new THREE.Points(new THREE.BufferGeometry(), evMat), treePts = new THREE.Points(new THREE.BufferGeometry(), treeMat);
+  evPts.frustumCulled = treePts.frustumCulled = false; evPts.visible = treePts.visible = false; evPts.renderOrder = 6; scene.add(evPts, treePts);
+  function buildFuture() {
+    const rnd = (() => { let s = 1234567; return () => ((s = Math.imul(s ^ (s >>> 15), 2246822519) + 0x9e3779b9 | 0) >>> 0) / 4294967296; })();
+    const ev: number[] = [];
+    for (const p of paths) for (let s = 600 + rnd() * 900; s < p.len; s += 1400 + rnd() * 1600) {
+      let k = 1; while (k < p.cum.length - 1 && p.cum[k] < s) k++;
+      const t = (s - p.cum[k - 1]) / (p.cum[k] - p.cum[k - 1] || 1);
+      const x = p.pts[(k - 1) * 2] + (p.pts[k * 2] - p.pts[(k - 1) * 2]) * t + (rnd() - 0.5) * 60, z = p.pts[(k - 1) * 2 + 1] + (p.pts[k * 2 + 1] - p.pts[(k - 1) * 2 + 1]) * t + (rnd() - 0.5) * 60;
+      ev.push(x, heightAt(x, z) + 14, z);
+    }
+    for (const b of buildings) if (!b.concept && b.foot > 2500 && rnd() < 0.5) ev.push(b.x + 30, heightAt(b.x + 30, b.z) + 14, b.z + 30); // big sites get chargers too
+    const evOrd = shuffle(ev, 3, rnd); evN = evOrd.length / 3;
+    evGeo = new THREE.BufferGeometry(); evGeo.setAttribute("position", new THREE.Float32BufferAttribute(evOrd, 3)); evPts.geometry = evGeo;
+    const tr: number[] = [], tc: number[] = [], greens = ["#2f9e44", "#40c057", "#2b8a3e", "#69db7c", "#37b24d"];
+    const TREES = mobile ? 9000 : 26000;
+    for (let i = 0; i < TREES && buildings.length; i++) {
+      const b = buildings[Math.floor(rnd() * buildings.length)]; const a = rnd() * Math.PI * 2, r = 18 + Math.sqrt(b.foot) * 0.6 + rnd() * 50;
+      const x = b.x + Math.cos(a) * r, z = b.z + Math.sin(a) * r; tr.push(x, heightAt(x, z) + 5 + rnd() * 4, z);
+      tmpC.set(greens[i % greens.length]); tc.push(tmpC.r, tmpC.g, tmpC.b);
+    }
+    treeN = TREES; treeGeo = new THREE.BufferGeometry(); treeGeo.setAttribute("position", new THREE.Float32BufferAttribute(tr, 3)); treeGeo.setAttribute("color", new THREE.Float32BufferAttribute(tc, 3)); treePts.geometry = treeGeo;
+  }
+  function shuffle(a: number[], stride: number, rnd: () => number) {
+    const n = a.length / stride, o: number[] = [], idx = Array.from({ length: n }, (_, i) => i);
+    for (let i = n - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [idx[i], idx[j]] = [idx[j], idx[i]]; }
+    for (const i of idx) for (let k = 0; k < stride; k++) o.push(a[i * stride + k]);
+    return o;
+  }
+  function setFuture(t: number | null) {
+    if (t == null) { futureT = 0; evPts.visible = treePts.visible = false; return; }
+    if (!evGeo) buildFuture();
+    futureT = THREE.MathUtils.clamp(t, 0, 1);
+    evGeo!.setDrawRange(0, Math.round(evN * futureT)); treeGeo!.setDrawRange(0, Math.round(treeN * futureT));
+    evPts.visible = treePts.visible = futureT > 0;
+  }
+
+  // ---------- savings sparks: gold motes rising off buildings ----------
+  const sparkSets: { p: THREE.Points; t: number; base: Float32Array }[] = [];
+  function sparks(pts: number[], color = "#ffd24a") {
+    if (!pts.length) return;
+    const base = Float32Array.from(pts), g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(Float32Array.from(pts), 3));
+    const p = new THREE.Points(g, new THREE.PointsMaterial({ color, map: dot, size: 40, transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, fog: false }));
+    p.frustumCulled = false; p.renderOrder = 8; scene.add(p); sparkSets.push({ p, t: 0, base });
+  }
+  function moveSparks(dt: number, camD: number) {
+    for (let k = sparkSets.length - 1; k >= 0; k--) {
+      const s = sparkSets[k]; s.t += dt / 2.8;
+      const pos = s.p.geometry.attributes.position as THREE.BufferAttribute, rise = Math.pow(s.t, 0.7) * Math.max(250, camD * 0.12);
+      for (let i = 0; i < pos.count; i++) pos.setY(i, s.base[i * 3 + 1] + rise * (0.6 + ((i * 37) % 10) / 20));
+      pos.needsUpdate = true;
+      const m = s.p.material as THREE.PointsMaterial; m.opacity = Math.max(0, 1 - s.t); m.size = THREE.MathUtils.clamp(camD / 70, 14, 140);
+      if (s.t >= 1) { scene.remove(s.p); s.p.geometry.dispose(); m.dispose(); sparkSets.splice(k, 1); }
+    }
+  }
+
+  // ---------- cinematic look: bloom ----------
+  let composer: EffectComposer | null = null, bloom: UnrealBloomPass | null = null, cinema = false;
+  function setCinema(on: boolean) {
+    cinema = on;
+    if (on && !composer) {
+      composer = new EffectComposer(renderer);
+      composer.addPass(new RenderPass(scene, camera));
+      bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.8, 0.55, 0.82);
+      composer.addPass(bloom); composer.addPass(new OutputPass());
+      resize();
+    }
+    setHour(lastHour);
+  }
+
   // ---------- labels ----------
   let labels: { l: Label; el: HTMLDivElement }[] = [];
   function setLabels(list: Label[]) {
@@ -508,7 +740,13 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
     hemi.color.set("#dfefff").lerp(new THREE.Color("#33456e"), night);
     const dusk = Math.max(0, 1 - Math.abs(elev) / 0.22) * (night < 0.98 ? 1 : 0);
     sky.copy(DAYSKY).lerp(NIGHT, night).lerp(DUSK, dusk * 0.55);
-    renderer.setClearColor(sky); (scene.fog as THREE.Fog).color.copy(sky);
+    lastHour = h;
+    const fog = scene.fog as THREE.Fog; fog.near = 22000; fog.far = 110000;
+    if (weather === "typhoon") { const k = 0.35 + 0.55 * wLevel; sky.lerp(STORM, k); sun.intensity *= 1 - 0.75 * k; hemi.intensity *= 1 - 0.4 * k; fog.near = 2500; fog.far = 60000 - 35000 * wLevel; }
+    else if (weather === "heat") { const k = 0.25 + 0.35 * wLevel; sky.lerp(HAZE, k); sun.color.lerp(HAZE, 0.25); fog.near = 6000; fog.far = 90000 - 40000 * wLevel; }
+    if (flash > 0) { sky.lerp(FLASH, flash * 0.85); hemi.intensity += flash * 2.5; }
+    renderer.setClearColor(sky); fog.color.copy(sky);
+    if (bloom) { bloom.strength = cinema ? 0.12 + 1.05 * night : 0; bloom.threshold = 0.97 - 0.3 * night; }
     U.uNight.value = night;
     (stars.material as THREE.PointsMaterial).opacity = Math.max(0, night - 0.3);
     for (const g of Object.values(grounds)) g.mat.emissiveIntensity = night * 1.2;
@@ -521,15 +759,23 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
 
   // ---------- camera moves ----------
   const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-  function startFlight(toP: THREE.Vector3, toL: THREE.Vector3, dur: number) {
+  function startFlight(toP: THREE.Vector3, toL: THREE.Vector3, dur: number, arc?: number) {
     const d = camera.position.distanceTo(toP);
-    flight = { t: 0, dur, fromP: camera.position.clone(), fromL: controls.target.clone(), toP, toL, arc: Math.min(d * 0.3, 4500) };
+    flight = { t: 0, dur, fromP: camera.position.clone(), fromL: controls.target.clone(), toP, toL, arc: arc ?? Math.min(d * 0.3, 4500) };
   }
-  function flyTo(x: number, z: number, dist = 900, y?: number) {
+  /** pitch: height/distance ratio of the camera (0.62 is the usual oblique view; lower is more drone-like). */
+  function flyTo(x: number, z: number, dist = 900, y?: number, dur = 2.2, pitch = 0.62) {
     const gy = y ?? heightAt(x, z);
     const dir = camera.position.clone().sub(controls.target).setY(0).normalize();
     if (!isFinite(dir.x) || dir.lengthSq() < 0.1) dir.set(0.5, 0, 0.85).normalize();
-    startFlight(new THREE.Vector3(x + dir.x * dist * 0.75, gy + dist * 0.62, z + dir.z * dist * 0.75), new THREE.Vector3(x, gy + 20, z), 2.2);
+    const hor = Math.sqrt(Math.max(0.05, 1 - pitch * pitch)) * dist;
+    startFlight(new THREE.Vector3(x + dir.x * hor, gy + dist * pitch, z + dir.z * hor), new THREE.Vector3(x, gy + 20, z), dur);
+  }
+  function intro(dur = 7.5) {
+    tourState = null;
+    camera.position.set(HOME.target.x + 9000, 60000, HOME.target.z + 26000);
+    controls.target.copy(HOME.target);
+    startFlight(HOME.pos.clone(), HOME.target.clone(), dur, 0);
   }
   function tour(stops: Stop[], onStop: (i: number) => void, onEnd: () => void) {
     tourState = { stops, i: -1, t: 0, from: { p: camera.position.clone(), l: controls.target.clone() }, onStop, onEnd };
@@ -581,6 +827,7 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
     if (!w || !h) return;
     renderer.setSize(w, h, false); renderer.domElement.style.width = w + "px"; renderer.domElement.style.height = h + "px";
     camera.aspect = w / h; camera.updateProjectionMatrix();
+    if (composer) { composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(w, h); bloom?.resolution.set(w / 2, h / 2); }
   };
   const ro = new ResizeObserver(resize); ro.observe(host); resize();
   const io = new IntersectionObserver((e) => { visible = e[0]?.isIntersecting ?? true; if (visible && !raf) loop(); }); io.observe(host);
@@ -599,6 +846,8 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
       camera.position.lerpVectors(flight.fromP, flight.toP, e); camera.position.y += Math.sin(Math.PI * e) * flight.arc;
       controls.target.lerpVectors(flight.fromL, flight.toL, e);
       if (t >= 1) { flight = null; if (tourState) tourState.t = 0; }
+    } else if (orbit && !tourState) {
+      const off = camera.position.clone().sub(controls.target); off.applyAxisAngle(yAxis, dtReal * orbit); camera.position.copy(controls.target).add(off);
     } else if (tourState) {
       tourState.t += dtReal;
       // drift slowly around the stop while the caption is read
@@ -607,12 +856,15 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
     }
     controls.target.x = THREE.MathUtils.clamp(controls.target.x, bound.x0, bound.x1);
     controls.target.z = THREE.MathUtils.clamp(controls.target.z, bound.z0, bound.z1);
+    controls.maxDistance = flight ? 1e6 : 42000;
     controls.update();
     // keep the camera above the hills
     const gy = heightAt(camera.position.x, camera.position.z) + 25;
     if (camera.position.y < gy) camera.position.y = gy;
     moveCars(dt);
     const camD = camera.position.distanceTo(controls.target);
+    moveFlows(dt, camD); moveScans(dtReal, camD); moveWeather(dt, camD); moveSparks(dtReal, camD);
+    U.uTime.value = now;
     beaconGroup.children.forEach((o) => {
       if (!o.userData.ring) return;
       const k = Math.max(1, camD / 3000);
@@ -622,7 +874,7 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
     });
     if (marker.visible) (marker.material as THREE.MeshBasicMaterial).opacity = 0.25 + 0.15 * Math.sin(now * 4);
     if (google && google.group.visible) google.update();
-    renderer.render(scene, camera);
+    if (cinema && composer) composer.render(dt); else renderer.render(scene, camera);
     placeLabels();
   }
   setHour(13);
@@ -631,6 +883,7 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
 
   return {
     buildings, addChunk, addConcept, paint, setHour, setDataMode, select, setLabels, setBeacons, setOutlines, flyTo, tour, stopTour, reset, zoom, heightAt, setLook,
+    setFlow, intro, scan, setWeather, floodY, setFuture, sparks, setCinema, setPulse(on) { U.uPulse.value = on ? 1 : 0; }, setOrbit(sp) { orbit = sp; },
     attributions() { return google && look === "google" ? google.attributions() : ""; },
     setWheelFree(f) { wheelFree = f; },
     dispose() {
@@ -638,6 +891,7 @@ export function createCityScene(opts: { host: HTMLElement; terrain: TerrainData;
       renderer.domElement.removeEventListener("wheel", onWheel);
       renderer.domElement.removeEventListener("pointerdown", onDown); renderer.domElement.removeEventListener("pointerup", onUp);
       controls.dispose();
+      composer?.dispose();
       if (google) { scene.remove(google.group); google.dispose(); google = null; }
       scene.traverse((o) => { const m = o as THREE.Mesh; m.geometry?.dispose?.(); const mat = m.material as THREE.Material | THREE.Material[] | undefined; (Array.isArray(mat) ? mat : mat ? [mat] : []).forEach((x) => { (x as THREE.MeshLambertMaterial).map?.dispose(); (x as THREE.MeshLambertMaterial).emissiveMap?.dispose(); x.dispose(); }); });
       renderer.dispose(); renderer.domElement.remove(); labelLayer.remove();
