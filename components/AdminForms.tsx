@@ -1,7 +1,7 @@
 "use client";
 import { useFormState } from "react-dom";
 import SubmitButton from "./SubmitButton";
-import { createUser, resetPassword } from "@/app/(app)/admin/users/actions";
+import { createUser } from "@/app/(app)/admin/users/actions";
 
 type R = { ok?: string; error?: string } | undefined;
 export function CreateUserForm() {
@@ -20,8 +20,4 @@ export function CreateUserForm() {
       {state?.ok && <div className="okmsg" style={{ marginTop: 10 }}>{state.ok}</div>}
     </form>
   );
-}
-export function ResetForm({ id }: { id: string }) {
-  const [state, action] = useFormState<R, FormData>(resetPassword as any, undefined);
-  return <form action={action} className="inline-form"><input type="hidden" name="id" value={id} /><SubmitButton label="Reset password" small cls="btn" />{state?.ok && <span className="mono" style={{ fontSize: 11.5 }}>{state.ok}</span>}</form>;
 }

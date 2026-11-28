@@ -38,7 +38,7 @@ export default function LoginForm({ demo, client, noAuto }: { demo: boolean; cli
   async function go(e: string, p: string) {
     setBusy(e); setErr("");
     const r = await signIn("credentials", { email: e, password: p, redirect: false });
-    if (r?.ok) window.location.href = "/"; else { setBusy(null); setErr(r?.error === "RATE_LIMIT" ? errText(r.error)! : "That email and password don't match an active account."); }
+    if (r?.ok) window.location.href = "/"; else { setBusy(null); setErr(r?.error === "RATE_LIMIT" ? errText(r.error)! : "That email doesn't match an active account."); }
   }
   return (
     <div className="login">
@@ -79,7 +79,7 @@ export default function LoginForm({ demo, client, noAuto }: { demo: boolean; cli
           <h2 style={{ fontSize: 22, marginBottom: 4 }}>Sign in</h2>
           <p className="hint" style={{ margin: "0 0 14px" }}>We&apos;ll send a 6-digit code to your email or phone. No password to remember.</p>
           <CodeForm />
-          <details className="signin-more"><summary>Use a password instead</summary>{err && <div className="err" style={{ marginTop: 12 }}>{err}</div>}<PasswordForm busy={busy} go={go} /></details>
+          {err && <div className="err" style={{ marginTop: 12 }}>{err}</div>}
           <p className="hint" style={{ marginTop: 18, fontSize: 12 }}>By signing in you agree to how we handle your data in our <a href="/privacy">privacy notice</a>.</p>
         </>}
       </div>
@@ -115,17 +115,6 @@ function CodeForm() {
       <div className="field"><label htmlFor="code">6-digit code</label><input id="code" name="code" className="codeinput" inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" maxLength={6} required autoFocus value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} /></div>
       <button className="btn pri" style={{ width: "100%", justifyContent: "center" }} disabled={busy || code.length !== 6}>{busy ? "Checking…" : "Sign in"}</button>
       <button type="button" className="btn" style={{ width: "100%", justifyContent: "center", marginTop: 8 }} onClick={() => window.location.reload()}>Use a different email or number</button>
-    </form>
-  );
-}
-
-function PasswordForm({ busy, go }: { busy: string | null; go: (e: string, p: string) => void }) {
-  const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
-  return (
-    <form onSubmit={(e) => { e.preventDefault(); go(email, password); }} style={{ marginTop: 12 }}>
-      <div className="field"><label htmlFor="email">Email</label><input id="email" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-      <div className="field"><label htmlFor="password">Password</label><input id="password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></div>
-      <button className="btn pri" style={{ width: "100%", justifyContent: "center" }} disabled={!!busy}>{busy ? "Signing in…" : "Sign in"}</button>
     </form>
   );
 }

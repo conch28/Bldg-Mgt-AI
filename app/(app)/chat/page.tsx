@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHead } from "@/components/ui";
@@ -20,6 +21,7 @@ export default async function ChatPage() {
               <div className="li"><b style={{ width: 120, flex: "none" }}>Answers</b><div>Balances, house rules, permits and amenity hours.</div></div>
               <div className="li"><b style={{ width: 120, flex: "none" }}>Repairs</b><div>Describe the problem and I&apos;ll open a ticket with a deadline.</div></div>
               <div className="li"><b style={{ width: 120, flex: "none" }}>Bookings</b><div>Aircon cleaning, deep cleaning, pest control and more.</div></div>
+              <div className="li"><b style={{ width: 120, flex: "none" }}>Rules & rights</b><div>Questions about dues, the master deed, neighbours or renting? <Link href="/ask" style={{ color: "var(--accent)", fontWeight: 600 }}>Ask AI</Link> answers with sources.</div></div>
               <div className="li"><b style={{ width: 120, flex: "none" }}>A person</b><div>Complaints and disputes go to the property manager within 15 minutes.</div></div>
             </div>
             <div className="hint" style={{ marginTop: 10 }}>Emergency? Call the guard house at local 100, or 911.</div>
