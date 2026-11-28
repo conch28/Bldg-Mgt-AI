@@ -10,7 +10,10 @@ export const dynamic = "force-dynamic";
 export default async function MapDemo({ searchParams }: { searchParams: { client?: string } }) {
   const q = searchParams.client === "bcda" || searchParams.client === "pax" ? `?client=${searchParams.client}` : "";
   const s = await getServerSession(authOptions);
-  if (s?.user) redirect(`/green/map${q}`);
+  // Already signed in with a role that can see the map: go straight there. Anyone else (a Skyland owner, guard,
+  // investor...) is switched to the map demo account below, so the link never lands on Skyland or a code screen.
+  const role = (s?.user as { role?: string } | undefined)?.role;
+  if (role && ["CLIENT", "BOARD", "MANAGER", "ADMIN"].includes(role)) redirect(`/green/map${q}`);
   if (!demoMode()) redirect(`/login?callbackUrl=${encodeURIComponent("/green/map" + q)}`);
   return <LoginForm demo client="ncc" next={`/green/map${q}`} />;
 }
