@@ -12,6 +12,7 @@ import { prisma } from "./db";
 import { peso, fmtDate, monthLong, currentPeriod, nowManila } from "./format";
 import { budgetFor, collectionTrend, overdueAccounts, slaStats } from "./metrics";
 import type { SessionUser } from "./auth";
+import { KB_REVIEWED, cardById, findCards, isUrgent, kbForPrompt, type Card, type Escalate } from "./askkb";
 
 export const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
 export const aiEnabled = () => Boolean(process.env.ANTHROPIC_API_KEY);
@@ -113,6 +114,13 @@ async function runTool(user: SessionUser, name: string, input: any): Promise<str
   return "Unknown tool";
 }
 
+export const BUILDING_FACTS = `- Dues: ₱98 per sqm per month, due on the last day of the month. 2% monthly penalty after 30 days (House Rules §7.1). Amenity suspension after 90 days (§7.3).
+- Layout: Tower A and Tower B, 25 floors each. Unit codes are floor + unit number + tower, e.g. 1202B = 12th floor, unit 02, Tower B. Penthouses on floors 24-25. Two basement parking levels.
+- Amenities (5th level and podium deck): pool 6 AM-9 PM (closed Mondays), gym 5 AM-11 PM, function room ₱2,500 per 4 hours by reservation.
+- Renovations: permit required; Mon-Sat 8 AM-5 PM; ₱1,500 fee + ₱10,000 refundable bond; submit plans 5 working days ahead; no changes to plumbing stacks or structural walls.
+- Guests: register with the lobby guard; visitor parking by request.
+- Admin office: Mon-Sat 8 AM-6 PM, ground floor.`;
+
 const HELPDESK_SYSTEM = `You are the Skyland Plaza helpdesk assistant, run by Building Mgt AI, the property manager of a two-tower, 172-unit residential condominium in Makati.
 
 Who you talk to: unit owners and residents. Reply in the language they use: English, Tagalog, or Taglish. Be warm and polite (use "po" in Tagalog/Taglish), concise (2-5 short sentences), and practical. Use amounts in Philippine pesos (₱).
@@ -124,14 +132,10 @@ Rules:
 - Emergencies (fire, smoke, gas smell, injury, someone trapped): tell them to call the guard house at local 100 and 911 immediately, then escalate_to_manager.
 - Escalate complaints about neighbours or staff, billing disputes, legal questions, or requests for a person.
 - Do not share other residents' information.
+- For questions about condo law, rights, the master deed or by-laws, give a short answer and suggest the Ask AI page (/ask), which has sourced answers.
 
 Building facts:
-- Dues: ₱98 per sqm per month, due on the last day of the month. 2% monthly penalty after 30 days (House Rules §7.1). Amenity suspension after 90 days (§7.3).
-- Layout: Tower A and Tower B, 25 floors each. Unit codes are floor + unit number + tower, e.g. 1202B = 12th floor, unit 02, Tower B. Penthouses on floors 24-25. Two basement parking levels.
-- Amenities (5th level and podium deck): pool 6 AM-9 PM (closed Mondays), gym 5 AM-11 PM, function room ₱2,500 per 4 hours by reservation.
-- Renovations: permit required; Mon-Sat 8 AM-5 PM; ₱1,500 fee + ₱10,000 refundable bond; submit plans 5 working days ahead; no changes to plumbing stacks or structural walls.
-- Guests: register with the lobby guard; visitor parking by request.
-- Admin office: Mon-Sat 8 AM-6 PM, ground floor.`;
+${BUILDING_FACTS}`;
 
 export async function helpdeskReply(user: SessionUser, text: string): Promise<{ reply: string; ai: boolean }> {
   const history = await prisma.chatMessage.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 16 });
@@ -428,3 +432,91 @@ export async function explainFlag(facts: string, fallback: string): Promise<{ te
     facts, fallback,
   );
 }
+
+/* ------------------------------------------------------------------ */
+/* Ask AI: sourced answers on condo law, rights and building rules     */
+/* ------------------------------------------------------------------ */
+
+export type AskTurn = { role: "user" | "assistant"; content: string };
+export type AskAnswer = { reply: string; cards: string[]; escalate: Escalate | null; ai: boolean };
+
+const ASK_SYSTEM = (who: string) => `You are "Ask AI", the advisor for residents and the board of Skyland Plaza, a two-tower residential condominium in Makati, Philippines, managed by Building Mgt AI. Our goal is happier residents, so be warm, calm and practical.
+
+You are talking to ${who}.
+
+How to answer:
+- Answer from the KNOWLEDGE CARDS below and the building facts. Cite every card you rely on with its tag, like [#dues-lien], at the end of the sentence that uses it. Never invent a law, section number, case or agency; if the cards don't cover it, say what general principle likely applies, say you're not sure, and suggest who to ask.
+- Building documents (master deed, declaration of restrictions, by-laws, house rules) can change default rules. Say so when it matters.
+- Keep it short for a phone screen: a 1-2 sentence direct answer first, then up to 4 short bullet steps. Use **bold** sparingly. No headings, no tables.
+- Reply in the language the person uses: English, Tagalog or Taglish. Use "po" in Tagalog/Taglish.
+- When a case needs a lawyer (lawsuits, foreclosure, removing trustees, contract termination, anything with a deadline or big money), say so plainly and suggest the "Talk to a person" button. You are not a lawyer and this is general information, not legal advice.
+- Safety first: if someone may be in danger (fire, gas, injury, violence, threats, self-harm), tell them to call the guard house at local 100 or 911 right away before anything else.
+- Never reveal or guess other residents' personal information, balances or disputes.
+- For money questions about the person's own account, use get_my_account if it is available; never guess balances.
+- Don't name any current or past property management company.
+
+Building facts:
+${BUILDING_FACTS}
+
+KNOWLEDGE CARDS (reviewed ${KB_REVIEWED}):
+${kbForPrompt()}`;
+
+const ASK_TOOLS: BetaTool[] = TOOLS.filter((t) => t.name === "get_my_account");
+
+function fallbackAnswer(q: string, history: AskTurn[]): AskAnswer {
+  if (isUrgent(q)) {
+    const c = cardById("harassment-safety")!;
+    return { reply: "**If anyone is in danger, call the guard house at local 100 or 911 now, or press SOS.**\n\n" + c.answer, cards: [c.id], escalate: "emergency", ai: false };
+  }
+  // Short follow-ups ("what about tenants?") borrow context from the last question.
+  const lastUser = [...history].reverse().find((h) => h.role === "user")?.content ?? "";
+  let hits = findCards(q, 3);
+  if (!hits.length && q.split(/\s+/).length < 6 && lastUser) hits = findCards(lastUser + " " + q, 3);
+  if (!hits.length) {
+    return { reply: "I don't have a sourced answer for that yet po. Try one of the topics below, or tap **Talk to a person** and the property manager will reply.", cards: [], escalate: "manager", ai: false };
+  }
+  const [c, ...more] = hits;
+  const lines = [c.answer, "", ...c.steps.map((s) => "- " + s)];
+  if (more.length) lines.push("", "Related: " + more.map((m) => m.q).join(" · "));
+  return { reply: lines.join("\n"), cards: hits.map((h) => h.id), escalate: c.escalate ?? null, ai: false };
+}
+
+export async function askAdvisor(user: SessionUser, question: string, history: AskTurn[]): Promise<AskAnswer> {
+  if (!aiEnabled()) return fallbackAnswer(question, history);
+  const owner = user.role === "OWNER";
+  const units = owner ? await ownerUnits(user.id) : [];
+  const who = owner ? `a unit owner/resident, ${user.name}, unit(s) ${units.map((u) => u.code).join(", ") || "none linked"}`
+    : user.role === "BOARD" ? `a board member (trustee) of the condominium corporation, ${user.name}` : `${user.name}, on the property management team`;
+  const system = `${ASK_SYSTEM(who)}\n\nToday is ${nowManila().toLocaleString("en-PH", { timeZone: "Asia/Manila", dateStyle: "full" })}.`;
+  const messages: BetaMessageParam[] = history.slice(-8).map((h) => ({ role: h.role, content: h.content.slice(0, 4000) }));
+  messages.push({ role: "user", content: question });
+  const tools = owner ? ASK_TOOLS : undefined;
+
+  for (let i = 0; i < 4; i++) {
+    const res = await ask({ system, messages, tools, effort: "medium", max_tokens: 4000 });
+    if (res.stop_reason === "refusal") return { reply: "Pasensya na po, I can't help with that here. Tap Talk to a person and the property manager will follow up.", cards: [], escalate: "manager", ai: true };
+    const uses = res.content.filter((b): b is BetaToolUseBlock => b.type === "tool_use");
+    if (res.stop_reason !== "tool_use" || !uses.length) return shapeAnswer(textOf(res), question);
+    messages.push({ role: "assistant", content: res.content as any });
+    const results: BetaToolResultBlockParam[] = [];
+    for (const u of uses) {
+      try { results.push({ type: "tool_result", tool_use_id: u.id, content: owner && u.name === "get_my_account" ? await runTool(user, u.name, u.input) : "Not available here." }); }
+      catch (e) { results.push({ type: "tool_result", tool_use_id: u.id, content: "Tool failed: " + (e as Error).message, is_error: true }); }
+    }
+    messages.push({ role: "user", content: results });
+  }
+  return fallbackAnswer(question, history);
+}
+
+/** Pulls the [#card] tags out of Claude's text into source chips, and picks the strongest escalation. */
+function shapeAnswer(text: string, question: string): AskAnswer {
+  const ids = [...new Set([...text.matchAll(/\[#([a-z0-9-]+)\]/g)].map((m) => m[1]))].filter((id) => cardById(id));
+  const reply = text.replace(/\s*\[#[a-z0-9-]+\]/g, "").trim() || "Noted po.";
+  const cards = ids.map((id) => cardById(id)!) as Card[];
+  const order: Escalate[] = ["emergency", "lawyer", "agency", "board", "manager", "barangay"];
+  let escalate: Escalate | null = null;
+  for (const e of order) if (cards.some((c) => c.escalate === e)) { escalate = e; break; }
+  if (isUrgent(question)) escalate = "emergency";
+  return { reply, cards: ids, escalate, ai: true };
+}
+

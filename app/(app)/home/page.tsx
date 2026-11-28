@@ -21,7 +21,7 @@ const ACTIONS = [
   { href: "/property", icon: "key", t: "Rent or sell" },
   { href: "/moving", icon: "box", t: "Moving" },
   { href: "/community", icon: "store", t: "Marketplace" },
-  { href: "/services", icon: "bag", t: "Home services" },
+  { href: "/ask", icon: "spark", t: "Ask AI" },
 ];
 
 const clip = (t: string) => (t.length > 170 ? t.slice(0, 170) + "…" : t);
