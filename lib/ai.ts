@@ -12,6 +12,11 @@ import { prisma } from "./db";
 import { peso, fmtDate, monthLong, currentPeriod, nowManila } from "./format";
 import { budgetFor, collectionTrend, overdueAccounts, slaStats } from "./metrics";
 import type { SessionUser } from "./auth";
+import { KB_REVIEWED, cardById, findCards, isUrgent, kbForPrompt, type Card, type Escalate } from "./askkb";
+import { LIBRARY_REVIEWED, libraryForPrompt, type LegalEntry } from "./legallibrary";
+import { RULES_VERSION } from "./houserules";
+import { loadLibrary, loadRules, rulesForPrompt, searchLibrary, searchRules, type Rule } from "./knowledge";
+import { ActionSchema, REPAIR_CATEGORIES, amenityOptions, guessAction, todayManila, type Action, type AmenityOption } from "./assist";
 
 export const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
 export const aiEnabled = () => Boolean(process.env.ANTHROPIC_API_KEY);
@@ -113,6 +118,13 @@ async function runTool(user: SessionUser, name: string, input: any): Promise<str
   return "Unknown tool";
 }
 
+export const BUILDING_FACTS = `- Dues: ₱98 per sqm per month, due on the last day of the month. 2% monthly penalty after 30 days (House Rules §7.1). Amenity booking paused after 60 days late; demand letter and possible lien after 90 days (§7.3).
+- Layout: Tower A and Tower B, 25 floors each. Unit codes are floor + unit number + tower, e.g. 1202B = 12th floor, unit 02, Tower B. Penthouses on floors 24-25. Two basement parking levels.
+- Amenities (5th level and podium deck): pool 6 AM-9 PM (closed Mondays), gym 5 AM-11 PM, function room ₱2,500 per 4 hours by reservation.
+- Renovations: permit required; Mon-Sat 8 AM-5 PM; ₱1,500 fee + ₱10,000 refundable bond; submit plans 5 working days ahead; no changes to plumbing stacks or structural walls.
+- Guests: register with the lobby guard; visitor parking by request.
+- Admin office: Mon-Sat 8 AM-6 PM, ground floor.`;
+
 const HELPDESK_SYSTEM = `You are the Skyland Plaza helpdesk assistant, run by Building Mgt AI, the property manager of a two-tower, 172-unit residential condominium in Makati.
 
 Who you talk to: unit owners and residents. Reply in the language they use: English, Tagalog, or Taglish. Be warm and polite (use "po" in Tagalog/Taglish), concise (2-5 short sentences), and practical. Use amounts in Philippine pesos (₱).
@@ -124,14 +136,10 @@ Rules:
 - Emergencies (fire, smoke, gas smell, injury, someone trapped): tell them to call the guard house at local 100 and 911 immediately, then escalate_to_manager.
 - Escalate complaints about neighbours or staff, billing disputes, legal questions, or requests for a person.
 - Do not share other residents' information.
+- For questions about condo law, rights, the master deed or by-laws, give a short answer and suggest the Ask AI page (/ask), which has sourced answers.
 
 Building facts:
-- Dues: ₱98 per sqm per month, due on the last day of the month. 2% monthly penalty after 30 days (House Rules §7.1). Amenity suspension after 90 days (§7.3).
-- Layout: Tower A and Tower B, 25 floors each. Unit codes are floor + unit number + tower, e.g. 1202B = 12th floor, unit 02, Tower B. Penthouses on floors 24-25. Two basement parking levels.
-- Amenities (5th level and podium deck): pool 6 AM-9 PM (closed Mondays), gym 5 AM-11 PM, function room ₱2,500 per 4 hours by reservation.
-- Renovations: permit required; Mon-Sat 8 AM-5 PM; ₱1,500 fee + ₱10,000 refundable bond; submit plans 5 working days ahead; no changes to plumbing stacks or structural walls.
-- Guests: register with the lobby guard; visitor parking by request.
-- Admin office: Mon-Sat 8 AM-6 PM, ground floor.`;
+${BUILDING_FACTS}`;
 
 export async function helpdeskReply(user: SessionUser, text: string): Promise<{ reply: string; ai: boolean }> {
   const history = await prisma.chatMessage.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 16 });
@@ -317,7 +325,7 @@ export async function writeBriefing(facts: string, fallback: string): Promise<{ 
 }
 
 // ---------- Photo-to-ticket ----------
-export const REPAIR_CATEGORIES = ["Plumbing", "Electrical", "Civil", "Mechanical", "Elevator", "Security", "Housekeeping", "Other"] as const;
+export { REPAIR_CATEGORIES };
 const PhotoRead = z.object({
   title: z.string().describe("Short ticket title in English, e.g. 'Water leaking from bathroom ceiling'"),
   category: z.enum(REPAIR_CATEGORIES),
@@ -427,4 +435,188 @@ export async function explainFlag(facts: string, fallback: string): Promise<{ te
     "You help a condominium property manager in Metro Manila review staff data entry. Given why an entry was flagged, write one or two plain sentences (under 45 words): what to check, and one innocent explanation to rule out first. Fair and coaching in tone; never call anyone dishonest. No markdown.",
     facts, fallback,
   );
+}
+
+/* ------------------------------------------------------------------ */
+/* Ask AI: sourced answers on condo law, rights and building rules     */
+/* ------------------------------------------------------------------ */
+
+export type AskTurn = { role: "user" | "assistant"; content: string };
+export type LibRef = { id: string; citation: string; title: string; date?: string; url?: string; verified: boolean };
+export type RuleRef = { id: string; section: string; title: string; text: string; status: string };
+export type AskAnswer = {
+  reply: string; cards: string[]; library: LibRef[]; rules: RuleRef[]; escalate: Escalate | null; ai: boolean;
+  action?: Action; amenities?: AmenityOption[];
+};
+
+const libRef = (e: LegalEntry): LibRef => ({ id: e.id, citation: e.citation, title: e.title, date: e.date, url: e.url, verified: e.verified });
+const ruleRef = (r: Rule): RuleRef => ({ id: r.id, section: r.section, title: r.title, text: r.text, status: r.status });
+
+const ASK_SYSTEM = (who: string, canAct: boolean) => `You are "Ask AI", the friendly helper for residents and the board of Skyland Plaza, a two-tower residential condominium in Makati, Philippines, managed by Building Mgt AI. Our goal is happier residents.
+
+You are talking to ${who}.
+
+Personality:
+- Warm, upbeat and a little funny, like a kind neighbour who happens to know the house rules by heart. A light joke, a playful line or one emoji is welcome in everyday topics (pets, parking, the gym, guests, paperwork). At most one joke per reply, and never at the person's expense.
+- Turn the humour off completely for emergencies, safety, injuries, harassment, money trouble or arrears, legal disputes, complaints about people, grief or anyone upset. Then be calm, clear and kind.
+
+How to answer:
+- Answer from the KNOWLEDGE CARDS, the HOUSE RULES and the LEGAL LIBRARY below, and the building facts. Cite what you rely on with its tag at the end of the sentence: cards and house rules like [#dues-lien] or [#hr-7-1], library entries like [@sc-first-ebank]. Never invent a law, section number, case, rule or agency; if nothing below covers it, say what general principle likely applies, say you're not sure, and suggest who to ask.
+- The house rules are a best-practice template until the board approves Skyland's own; when you quote a rule marked template, say "under the current house rules" and, if it matters, that the board may still change it.
+- Library entries marked [unverified] come from general legal knowledge: say a lawyer should confirm before anyone relies on them.
+- Building documents (master deed, declaration of restrictions, by-laws) can change default rules. Say so when it matters.
+- Keep it short for a phone screen: a 1-2 sentence direct answer first, then up to 4 short bullet steps. Use **bold** sparingly. No headings, no tables.
+- Reply in the language the person uses: English, Tagalog or Taglish. Use "po" in Tagalog/Taglish.
+- When a case needs a lawyer (lawsuits, foreclosure, removing trustees, contract termination, anything with a deadline or big money), say so plainly and suggest the "Talk to a person" button. You are not a lawyer and this is general information, not legal advice.
+- Safety first: if someone may be in danger (fire, gas, injury, violence, threats, self-harm), tell them to call the guard house at local 100 or 911 right away before anything else.
+- Never reveal or guess other residents' personal information, balances or disputes.
+- For money questions about the person's own account, use get_my_account if it is available; never guess balances.
+- Don't name any current or past property management company.
+${canAct ? `
+Doing things for the owner:
+- You can draft a repair ticket (draft_repair), a guest, guest parking, delivery or contractor pass (draft_pass), or an amenity booking (draft_amenity_booking). A draft is shown to the owner as a form with a Confirm button; nothing happens until they tap it. Use at most one draft per reply.
+- Draft as soon as you know what they want, even with details missing; they can fill blanks on the form. Ask at most one short question first only if you can't tell what they want.
+- After drafting, tell them in one line to check the details and tap Confirm. Never say it's done, booked or filed.
+- If the person describes an emergency (fire, smoke, gas, flooding, someone trapped), tell them to call local 100 or 911 first, then draft a HIGH priority repair.` : ""}`;
+
+const DRAFT_TOOLS: BetaTool[] = [
+  { name: "draft_repair", description: "Draft a repair or maintenance ticket for the owner to confirm. Priority HIGH for leaks, no water/power, safety or elevator issues; MEDIUM for things that block normal use; LOW for cosmetic issues.", input_schema: { type: "object", properties: {
+    title: { type: "string", description: "Short summary in English, e.g. 'Kitchen sink leaking'" },
+    description: { type: "string", description: "Details the owner gave, in their words" },
+    category: { type: "string", enum: [...REPAIR_CATEGORIES] },
+    priority: { type: "string", enum: ["LOW", "MEDIUM", "HIGH"] },
+    location: { type: "string", description: "Unit code, or a common area like 'Lobby' or 'Basement 2'. Empty for the owner's own unit." },
+  }, required: ["title", "category", "priority"], additionalProperties: false } },
+  { name: "draft_pass", description: "Draft a pass the lobby guard scans: GUEST (visitor), PARKING (guest parking, needs a plate), DELIVERY (courier going up to the unit) or CONTRACTOR (worker).", input_schema: { type: "object", properties: {
+    kind: { type: "string", enum: ["GUEST", "PARKING", "DELIVERY", "CONTRACTOR"] },
+    name: { type: "string", description: "Visitor, courier or company name; empty if not given" },
+    date: { type: "string", description: "First day, YYYY-MM-DD (Manila)" },
+    days: { type: "integer", minimum: 1, maximum: 30 },
+    plate: { type: "string", description: "Plate number if they mentioned a car" },
+    note: { type: "string", description: "Short note for the guard" },
+  }, required: ["kind", "date"], additionalProperties: false } },
+  { name: "draft_amenity_booking", description: "Draft an amenity booking. Use an amenity id from the AMENITIES list.", input_schema: { type: "object", properties: {
+    amenity_id: { type: "string" }, date: { type: "string", description: "YYYY-MM-DD (Manila)" },
+    hour: { type: "integer", minimum: 0, maximum: 23, description: "Start hour, 24h Manila time" },
+    guests: { type: "integer", minimum: 0, description: "Guests besides the owner" },
+  }, required: ["amenity_id", "date", "hour"], additionalProperties: false } },
+];
+const ASK_TOOLS: BetaTool[] = [...TOOLS.filter((t) => t.name === "get_my_account"), ...DRAFT_TOOLS];
+
+const JOKES = ["", "", " 😄", " ✨"];
+const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+
+function draftLine(a: Action, amenities: AmenityOption[]): string {
+  if (a.type === "repair") return pick(["Let's get that fixed po! 🔧", "Uh-oh. Let's get a technician on it. 🔧", "Say no more, help is on the way (almost)! 🔧"]) + " I've drafted the ticket below. Check the details and tap **Confirm**.";
+  if (a.type === "pass") return ({ GUEST: "Yay, visitors! 🎉", PARKING: "A parking spot for your guest, coming up! 🚗", DELIVERY: "Ooh, something's coming. 📦", CONTRACTOR: "Got it, a pass for your worker. 🧰" } as const)[a.kind] + " Fill in anything missing below and tap **Confirm**.";
+  const am = amenities.find((x) => x.id === a.amenityId);
+  return `${am ? `${am.name}, nice choice! ` : ""}Here's the booking. Check the date and time, then tap **Confirm**.${JOKES[1 + Math.floor(Math.random() * 3)]}`;
+}
+
+async function fallbackAnswer(user: SessionUser, q: string, history: AskTurn[]): Promise<AskAnswer> {
+  const [rules, library] = await Promise.all([loadRules(), loadLibrary()]);
+  const base = { library: [] as LibRef[], rules: [] as RuleRef[], ai: false };
+  if (isUrgent(q)) {
+    const c = cardById("harassment-safety")!;
+    return { ...base, reply: "**If anyone is in danger, call the guard house at local 100 or 911 now, or press SOS.**\n\n" + c.answer, cards: [c.id], escalate: "emergency" };
+  }
+  if (user.role === "OWNER") {
+    const amenities = await amenityOptions();
+    const action = guessAction(q, amenities);
+    if (action) return { ...base, reply: draftLine(action, amenities), cards: [], escalate: null, action, amenities };
+  }
+  // Short follow-ups ("what about tenants?") borrow context from the last question.
+  const lastUser = [...history].reverse().find((h) => h.role === "user")?.content ?? "";
+  const ctx = q.split(/\s+/).length < 6 && lastUser ? lastUser + " " + q : q;
+  let hits = findCards(q, 3);
+  if (!hits.length && ctx !== q) hits = findCards(ctx, 3);
+  const rHits = searchRules(rules, hits.length ? q : ctx, 2, hits.length ? 5 : 2);
+  const lHits = searchLibrary(library.filter((e) => e.who === "all" || user.role !== "OWNER" || e.who === "owner"), hits.length ? q : ctx, 2);
+  if (!hits.length && !rHits.length && !lHits.length) {
+    return { ...base, reply: "Hmm, that one's not in my notes yet po. 🤔 Try one of the topics below, or tap **Talk to a person** and the property manager will reply.", cards: [], escalate: "manager" };
+  }
+  const lines: string[] = [];
+  if (hits.length) { const c = hits[0]; lines.push(c.answer, "", ...c.steps.map((s) => "- " + s)); }
+  if (rHits.length) lines.push(...(lines.length ? [""] : []), ...rHits.map((r) => `**House Rules §${r.section} ${r.title}${r.status === "APPROVED" ? "" : " (template)"}:** ${r.text}`));
+  if (!hits.length && lHits.length) lines.push(...(lines.length ? [""] : []), ...lHits.slice(0, 1).map((e) => `**${e.citation}:** ${e.plain}`));
+  if (hits.length > 1) lines.push("", "Related: " + hits.slice(1).map((m) => m.q).join(" · "));
+  return { ...base, reply: lines.join("\n"), cards: hits.map((h) => h.id), rules: rHits.map(ruleRef), library: lHits.map(libRef), escalate: hits[0]?.escalate ?? null };
+}
+
+export async function askAdvisor(user: SessionUser, question: string, history: AskTurn[]): Promise<AskAnswer> {
+  if (!aiEnabled()) return fallbackAnswer(user, question, history);
+  const owner = user.role === "OWNER";
+  const [units, rules, library, amenities] = await Promise.all([owner ? ownerUnits(user.id) : [], loadRules(), loadLibrary(), owner ? amenityOptions() : []]);
+  const who = owner ? `a unit owner/resident, ${user.name}, unit(s) ${units.map((u) => u.code).join(", ") || "none linked"}`
+    : user.role === "BOARD" ? `a board member (trustee) of the condominium corporation, ${user.name}` : `${user.name}, on the property management team`;
+  const lastUser = [...history].reverse().find((h) => h.role === "user")?.content ?? "";
+  const lib = searchLibrary(library, `${lastUser} ${question}`, 8);
+  const system = `${ASK_SYSTEM(who, owner)}
+
+Today is ${nowManila().toLocaleString("en-PH", { timeZone: "Asia/Manila", dateStyle: "full" })} (${todayManila()}).
+
+Building facts:
+${BUILDING_FACTS}
+${owner ? `\nAMENITIES (id: name, hours, max people, fee):\n${amenities.map((a) => `${a.id}: ${a.name}, ${a.openHour}:00-${a.closeHour}:00, ${a.slotHours}h slots, max ${a.capacity}${a.fee ? `, ₱${a.fee.toLocaleString()}` : ""}`).join("\n")}\n` : ""}
+HOUSE RULES (${RULES_VERSION}; board edits override):
+${rulesForPrompt(rules)}
+
+KNOWLEDGE CARDS (reviewed ${KB_REVIEWED}):
+${kbForPrompt()}
+
+LEGAL LIBRARY (most relevant entries for this question, reviewed ${LIBRARY_REVIEWED}):
+${libraryForPrompt(lib) || "(none matched)"}`;
+  const messages: BetaMessageParam[] = history.slice(-8).map((h) => ({ role: h.role, content: h.content.slice(0, 4000) }));
+  messages.push({ role: "user", content: question });
+  let action: Action | undefined;
+
+  for (let i = 0; i < 4; i++) {
+    const res = await ask({ system, messages, tools: owner ? ASK_TOOLS : undefined, effort: "medium", max_tokens: 4000 });
+    if (res.stop_reason === "refusal") return { reply: "Pasensya na po, I can't help with that here. Tap Talk to a person and the property manager will follow up.", cards: [], library: [], rules: [], escalate: "manager", ai: true };
+    const uses = res.content.filter((b): b is BetaToolUseBlock => b.type === "tool_use");
+    if (res.stop_reason !== "tool_use" || !uses.length) {
+      const out = shapeAnswer(textOf(res), question, rules, library);
+      return action ? { ...out, action, amenities, reply: out.reply || draftLine(action, amenities) } : out;
+    }
+    messages.push({ role: "assistant", content: res.content as any });
+    const results: BetaToolResultBlockParam[] = [];
+    for (const u of uses) {
+      try {
+        if (!owner) { results.push({ type: "tool_result", tool_use_id: u.id, content: "Not available here." }); continue; }
+        if (u.name === "get_my_account") { results.push({ type: "tool_result", tool_use_id: u.id, content: await runTool(user, u.name, u.input) }); continue; }
+        const d = draftFromTool(u.name, u.input as Record<string, unknown>);
+        if (!d) { results.push({ type: "tool_result", tool_use_id: u.id, content: "Couldn't read that draft; check the fields.", is_error: true }); continue; }
+        if (action) { results.push({ type: "tool_result", tool_use_id: u.id, content: "Only one draft per reply; this one was not shown." }); continue; }
+        action = d;
+        results.push({ type: "tool_result", tool_use_id: u.id, content: "Draft shown to the owner as a form with a Confirm button. Nothing is done yet. Tell them in one line to check it and tap Confirm." });
+      } catch (e) { results.push({ type: "tool_result", tool_use_id: u.id, content: "Tool failed: " + (e as Error).message, is_error: true }); }
+    }
+    messages.push({ role: "user", content: results });
+  }
+  return fallbackAnswer(user, question, history);
+}
+
+function draftFromTool(name: string, x: Record<string, unknown>): Action | null {
+  const s = (v: unknown) => (typeof v === "string" ? v : "");
+  const raw = name === "draft_repair" ? { type: "repair", title: s(x.title), description: s(x.description), category: x.category, priority: x.priority, location: s(x.location) }
+    : name === "draft_pass" ? { type: "pass", kind: x.kind, name: s(x.name), date: s(x.date) || todayManila(), days: x.days ?? 1, plate: s(x.plate), note: s(x.note) }
+    : name === "draft_amenity_booking" ? { type: "amenity", amenityId: s(x.amenity_id), date: s(x.date) || todayManila(), hour: x.hour, guests: x.guests ?? 0 } : null;
+  if (!raw) return null;
+  const p = ActionSchema.safeParse(raw);
+  return p.success ? p.data : null;
+}
+
+/** Pulls the [#card] / [#hr-rule] / [@library] tags out of Claude's text into source chips, and picks the strongest escalation. */
+function shapeAnswer(text: string, question: string, rules: Rule[], library: LegalEntry[]): AskAnswer {
+  const tags = [...new Set([...text.matchAll(/\[#([a-z0-9-]+)\]/g)].map((m) => m[1]))];
+  const ids = tags.filter((id) => cardById(id));
+  const rHits = tags.map((id) => rules.find((r) => r.id === id)).filter((r): r is Rule => !!r);
+  const lHits = [...new Set([...text.matchAll(/\[@([a-z0-9-]+)\]/g)].map((m) => m[1]))].map((id) => library.find((e) => e.id === id)).filter((e): e is LegalEntry => !!e);
+  const reply = text.replace(/\s*\[[#@][a-z0-9-]+\]/g, "").trim();
+  const cards = ids.map((id) => cardById(id)!) as Card[];
+  const order: Escalate[] = ["emergency", "lawyer", "agency", "board", "manager", "barangay"];
+  let escalate: Escalate | null = null;
+  for (const e of order) if (cards.some((c) => c.escalate === e)) { escalate = e; break; }
+  if (isUrgent(question)) escalate = "emergency";
+  return { reply, cards: ids, rules: rHits.map(ruleRef), library: lHits.map(libRef), escalate, ai: true };
 }

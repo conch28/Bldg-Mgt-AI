@@ -44,7 +44,7 @@ Keep the demo as it is. Make a **second** Vercel project from the same repo, so 
 5. Sign in as the admin with a one-time code, accept the privacy notice, then Admin → **Import data**: download the template, fill one row per unit, check, import.
 6. Settings → Domains → add the custom domain (e.g. `app.yourbrand.ph`), add the DNS record Vercel shows.
 
-How production differs from the demo: one-tap role buttons, on-screen codes, "simulate" buttons and test payments are off; people sign in with a 6-digit code by email or SMS (a password is optional); everyone accepts the privacy notice on first sign-in.
+How production differs from the demo: one-tap role buttons, on-screen codes, "simulate" buttons and test payments are off; people sign in with a 6-digit code by email or SMS (no passwords); everyone accepts the privacy notice on first sign-in.
 
 ## Backups
 Supabase free has no downloadable backups, so `.github/workflows/backup.yml` makes one every night at 2 AM Manila, encrypted with AES-256, kept 30 days as a GitHub Actions artifact. Add two repository secrets: `DATABASE_BACKUP_URL` (the production `POSTGRES_URL_NON_POOLING`) and `BACKUP_PASSPHRASE` (keep it in a password manager). Restore steps are in the workflow file. On Supabase Pro, daily backups and point-in-time recovery are built in as well.
@@ -55,4 +55,4 @@ Supabase free has no downloadable backups, so `.github/workflows/backup.yml` mak
 - Uptime: point a free monitor (UptimeRobot, Better Stack) at `https://<domain>/api/health` every 5 minutes.
 
 ## Rate limits (stored in Postgres, so they hold across serverless instances)
-Sign-in codes: 5 requests per address per 15 min, 10 code checks; passwords: 8 tries per email per 15 min; per-IP caps on both. Chat: 12 per minute, 150 per day. AI drafts: 40 per hour. New listings: 10 per hour. Data export: 5 per hour.
+Sign-in codes: 5 requests per address per 15 min, 10 code checks; per-IP caps on both. Chat: 12 per minute, 150 per day. AI drafts: 40 per hour. New listings: 10 per hour. Data export: 5 per hour.

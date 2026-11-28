@@ -6,7 +6,8 @@ import crypto from "crypto";
 import { requireRole, audit } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
-const tempPassword = () => crypto.randomBytes(9).toString("base64url");
+// Nobody signs in with a password: accounts get a random, never-shown one because the column is required.
+const tempPassword = () => crypto.randomBytes(24).toString("base64url");
 
 export async function createUser(_: unknown, fd: FormData) {
   const a = await requireRole("ADMIN");
@@ -22,7 +23,7 @@ export async function createUser(_: unknown, fd: FormData) {
   }
   await audit(a.id, "user_create", `Created ${p.data.role.toLowerCase()} ${email}`);
   revalidatePath("/admin/users");
-  return { ok: `Account created for ${email}. Temporary password: ${pw} (share it privately; ask them to change it under Account).` };
+  return { ok: `Account created for ${email}. They sign in with a one-time code sent to their email or mobile. No password needed.` };
 }
 
 export async function toggleActive(fd: FormData) {
@@ -33,13 +34,4 @@ export async function toggleActive(fd: FormData) {
   await prisma.user.update({ where: { id }, data: { active: !u.active } });
   await audit(a.id, "user_toggle", `${u.active ? "Deactivated" : "Reactivated"} ${u.email}`);
   revalidatePath("/admin/users");
-}
-
-export async function resetPassword(_: unknown, fd: FormData) {
-  const a = await requireRole("ADMIN");
-  const id = z.string().parse(fd.get("id"));
-  const pw = tempPassword();
-  const u = await prisma.user.update({ where: { id }, data: { passwordHash: await bcrypt.hash(pw, 10) } });
-  await audit(a.id, "password_reset", `Reset password for ${u.email}`);
-  return { ok: `New temporary password for ${u.email}: ${pw}` };
 }

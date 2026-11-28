@@ -9,7 +9,7 @@ AI-first building management for Philippine condominiums. This first version run
 | **Owners** | My unit (balance, pay online, tickets, rate repairs, bookings) · Helpdesk chat (Claude, English/Tagalog/Taglish; files tickets, checks balances, books services, escalates to a person) · Services booking |
 | **Board** | Today at Skyland (briefing, KPIs, activity) · Finances (budget vs actual, income vs spending, AI monthly report, dues-increase planner) · Manager scorecard (computed from live data) · read-only Work orders and Collections |
 | **Property manager** | Work orders (status, assignee, live SLA timers, every change logged) · Collections (overdue accounts, AI-drafted reminders, SMS send, record payments) · Generate the board report |
-| **Admin** | Users & units (create accounts with temporary passwords, link owners to units, disable, reset) · Integration status · Audit log |
+| **Admin** | Users & units (create accounts, link owners to units, disable; people sign in with a one-time code) · Integration status · Audit log |
 
 **Data-entry accountability** (`lib/duties.ts`): every record has one owner, a deadline, a checker and an escalation path. Staff and board see **My tasks** (`/tasks`, overdue first, with a front-desk form to log walk-ins and calls); the board sees **Accountability** (`/duties`: the matrix plus on-time scores per role). Technicians close jobs from a one-tap **job link** (`/j/<token>`, no login) with a required after photo; the manager verifies within 24h. Money gates: no receipt, no payment; payment is released by someone other than the requester, never above the PO, and only after a linked repair is verified. Overdue records remind the owner, then their supervisor, then the board (daily cron and whenever a manager opens My tasks). Deadlines live in `DUTIES` and are the "Standard" set: ack tickets 1h by day / 4h at night, receipts within 24h, rounds by end of shift, board report by the 5th.
 
@@ -21,7 +21,7 @@ Everything is stored in Postgres. Every login, payment, ticket change, reminder 
 
 ## Stack
 
-Next.js 14 (App Router, server actions) · Prisma + Postgres (Supabase in production) · NextAuth (email + password, JWT sessions, 4 roles) · Anthropic SDK (`claude-opus-5-5` by default) · PayMongo Checkout (GCash, Maya, cards) · Semaphore SMS.
+Next.js 14 (App Router, server actions) · Prisma + Postgres (Supabase in production) · NextAuth (one-tap demo sign-in or one-time codes, JWT sessions) · Anthropic SDK (`claude-opus-5-5` by default) · PayMongo Checkout (GCash, Maya, cards) · Semaphore SMS.
 
 Each integration is optional. Without a key, the app falls back gracefully:
 
@@ -40,10 +40,11 @@ cp .env.example .env          # fill DATABASE_URL, DIRECT_URL, NEXTAUTH_SECRET
 npm install
 npx prisma migrate deploy     # create tables
 npm run db:seed               # load Skyland sample data
+npm run db:legal              # load the legal library and template house rules for Ask AI
 npm run dev                   # http://localhost:3000
 ```
 
-Seeded logins (password `Skyland2026!`, or `SEED_PASSWORD`):
+Seeded logins (no passwords: on the demo site, tap a role on the sign-in page):
 
 | Role | Email |
 |---|---|
@@ -76,7 +77,7 @@ prisma/seed.ts        Skyland sample data (refuses to run in production unless S
 
 - Turn off `NEXT_PUBLIC_SHOW_DEMO_LOGINS` and `ALLOW_TEST_PAYMENTS`.
 - Don't seed production with sample data. Create the building and accounts with real data (an import script for the unit/owner list is the next thing to build).
-- Change all seeded passwords, or don't create seed accounts in production.
+- Don't create seed accounts in production.
 - Have the association's Data Protection Officer review the privacy notice (Data Privacy Act, RA 10173). Owner names, units, phones and balances are personal data.
 - Budget lines are entered by seed only today; a bookkeeping import (or Xero/QuickBooks sync) is next.
 - The app assumes one building per deployment. Most queries don't filter by building yet.

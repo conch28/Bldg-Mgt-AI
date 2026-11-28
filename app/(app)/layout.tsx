@@ -4,6 +4,8 @@ import Providers from "../providers";
 import { requireRole, homeFor } from "@/lib/auth";
 import { Suspense } from "react";
 import Tour from "@/components/Tour";
+import AskFab from "@/components/AskFab";
+import { aiEnabled } from "@/lib/ai";
 import { prisma } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { demoMode } from "@/lib/env";
@@ -19,6 +21,7 @@ const ALL: Item[] = [
   { href: "/my", label: "Bills & dues", group: "Everyday", icon: "card", roles: O },
   { href: "/report", label: "Report a problem", group: "Everyday", icon: "wrench", roles: O },
   { href: "/chat", label: "Helpdesk", group: "Everyday", icon: "chat", roles: O },
+  { href: "/ask", label: "Ask AI: rules & rights", group: "Everyday", icon: "spark", roles: O },
   { href: "/updates", label: "Building updates", group: "Everyday", icon: "mega", roles: O },
   { href: "/property", label: "Rent out or sell", group: "My unit", icon: "key", roles: O },
   { href: "/passes", label: "Guest & stay passes", group: "My unit", icon: "pass", roles: O },
@@ -29,6 +32,7 @@ const ALL: Item[] = [
   { href: "/neighbors", label: "Neighbours & events", group: "Community", icon: "users", roles: O },
   { href: "/community", label: "Marketplace & lost and found", group: "Community", icon: "store", roles: O },
   { href: "/polls", label: "Voting", group: "Community", icon: "vote", roles: O },
+  { href: "/rules", label: "House rules", group: "Community", icon: "doc", roles: O },
   { href: "/documents", label: "Documents", group: "Community", icon: "folder", roles: O },
   { href: "/sos", label: "Emergency SOS", group: "Community", icon: "alert", roles: O },
   { href: "/typhoon", label: "Typhoon & safety", group: "Community", icon: "storm", roles: O },
@@ -53,6 +57,8 @@ const ALL: Item[] = [
   { href: "/happiness", label: "Resident happiness", group: "Board", icon: "heart", roles: B },
   { href: "/board", label: "Building overview", group: "Board", icon: "pulse", roles: B },
   { href: "/reports", label: "Reports & finances", group: "Board", icon: "bars", roles: B },
+  { href: "/ask", label: "Ask AI: law & procedure", group: "Board", icon: "spark", roles: B },
+  { href: "/rules", label: "House rules (edit & approve)", group: "Board", icon: "doc", roles: B },
   { href: "/advisor", label: "AI advisor & weather", group: "Board", icon: "bulb", roles: B },
   { href: "/procurement", label: "Procurement & controls", group: "Board", icon: "cart", roles: B },
   { href: "/scorecard", label: "Manager scorecard", group: "Board", icon: "medal", roles: B },
@@ -135,6 +141,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {overdue > 0 && <Link href="/tasks" className="overdue-banner"><b>{overdue} record{overdue > 1 ? "s" : ""} overdue.</b> Tap to enter {overdue > 1 ? "them" : "it"} now.</Link>}
           {children}
         </div>
+        {["OWNER", "BOARD", "MANAGER", "ADMIN"].includes(u.role) && !bcdaClient && <AskFab audience={u.role === "OWNER" ? "owner" : "board"} name={u.name.split(" ")[0]} ai={aiEnabled()} canAct={u.role === "OWNER"} />}
         <Suspense fallback={null}><Tour uid={u.id} role={bcdaClient ? "CLIENT_BCDA" : u.role} /></Suspense>
       </div>
     </Providers>

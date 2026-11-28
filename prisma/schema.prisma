@@ -1177,3 +1177,44 @@ model MapRemote {
   createdBy String?
   updatedAt DateTime @updatedAt
 }
+
+/**
+ * ---------------- Ask AI knowledge ----------------
+ */
+
+/// A law, court ruling, tax ruling or regulator issuance Ask AI can cite. Copied from lib/legallibrary.ts on every deploy (prisma/legal-sync.ts).
+model LegalSource {
+  id         String   @id // e.g. "sc-first-ebank"
+  kind       String
+  citation   String
+  title      String
+  agency     String
+  date       String?
+  topics     String[]
+  summary    String
+  plain      String
+  who        String   @default("all") // all | owner | board
+  url        String?
+  verified   Boolean  @default(false)
+  reviewedAt String // YYYY-MM-DD the entry was last checked
+  updatedAt  DateTime @updatedAt
+
+  @@index([kind])
+}
+
+/// One house rule. Starts as the best-practice template (lib/houserules.ts); the board edits or approves it on /rules.
+model HouseRule {
+  id         String    @id // e.g. "hr-7-1"
+  section    String // "7.1"
+  chapter    String
+  title      String
+  text       String
+  topics     String[]
+  basis      String?
+  status     String    @default("TEMPLATE") // TEMPLATE | APPROVED
+  active     Boolean   @default(true)
+  editedBy   String?
+  approvedBy String?
+  approvedAt DateTime?
+  updatedAt  DateTime  @updatedAt
+}

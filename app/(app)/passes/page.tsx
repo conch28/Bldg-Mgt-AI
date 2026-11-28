@@ -8,7 +8,7 @@ import { createPass, revokePass } from "./actions";
 import SharePass from "@/components/SharePass";
 
 export const dynamic = "force-dynamic";
-const KIND: Record<string, string> = { GUEST: "Guest", DELIVERY: "Delivery", CONTRACTOR: "Contractor / worker", MOVE: "Move in / move out", STAY: "Short-stay guest (Airbnb)" };
+const KIND: Record<string, string> = { GUEST: "Guest", PARKING: "Guest parking", DELIVERY: "Delivery", CONTRACTOR: "Contractor / worker", MOVE: "Move in / move out", STAY: "Short-stay guest (Airbnb)" };
 
 export default async function Passes({ searchParams }: { searchParams: { new?: string; error?: string } }) {
   const u = await requireRole("OWNER");
