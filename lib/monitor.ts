@@ -29,7 +29,7 @@ async function sendToSentry(message: string, detail: string, ctx: { source?: str
   await fetch(url, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      message, level: "error", platform: "node", environment: process.env.DEMO_MODE === "1" ? "demo" : "production",
+      message, level: "error", platform: "node", environment: process.env.DEMO_MODE !== "0" ? "demo" : "production",
       tags: { source: ctx.source ?? "server", path: ctx.path ?? "" }, user: ctx.userId ? { id: ctx.userId } : undefined, extra: { detail },
     }),
     signal: AbortSignal.timeout(3000),

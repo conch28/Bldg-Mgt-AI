@@ -1,5 +1,5 @@
 /**
- * Production first run (DEMO_MODE off). Creates the building and the first admin login, plus a starter
+ * Production first run (DEMO_MODE=0). Creates the building and the first admin login, plus a starter
  * amenity and service list the admin can edit. No sample residents, bills or messages.
  * Runs on every deploy and only creates what is missing.
  *   ADMIN_EMAIL (required), ADMIN_NAME, ADMIN_MOBILE, BUILDING_NAME, BUILDING_CITY, DUES_RATE

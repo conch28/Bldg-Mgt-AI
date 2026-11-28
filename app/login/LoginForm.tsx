@@ -70,7 +70,6 @@ export default function LoginForm({ demo, client, noAuto, next }: { demo: boolea
           </div>
           {err && <div className="err" style={{ marginTop: 12 }}>{err}</div>}
           <details className="signin-more"><summary>Sign in with your own email</summary><EmailOnlyForm busy={busy} go={go} /></details>
-          <details className="signin-more"><summary>Try the one-time code sign-in</summary><div style={{ marginTop: 12 }}><CodeForm /></div></details>
         </> : <>
           <h2 style={{ fontSize: 22, marginBottom: 4 }}>Sign in</h2>
           <p className="hint" style={{ margin: "0 0 14px" }}>We&apos;ll send a 6-digit code to your email or phone. No password to remember.</p>
