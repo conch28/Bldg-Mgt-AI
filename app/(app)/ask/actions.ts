@@ -2,6 +2,8 @@
 import { z } from "zod";
 import { requireRole, audit } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { revalidatePath } from "next/cache";
+import { runAction, type ActionResult } from "@/lib/assist";
 
 const Input = z.object({ question: z.string().trim().min(3).max(2000), topic: z.string().max(120).optional() });
 
@@ -23,4 +25,12 @@ export async function askPerson(input: { question: string; topic?: string }): Pr
   } });
   await audit(u.id, "work_order", `Opened WO-${wo.number} from Ask AI`);
   return { ok: true, ticket: `WO-${wo.number}` };
+}
+
+/** The owner tapped Confirm on a draft from the AI helper (repair, pass or amenity booking). */
+export async function confirmAction(action: unknown): Promise<ActionResult> {
+  const u = await requireRole("OWNER");
+  const r = await runAction(u, action);
+  if (r.ok) revalidatePath(r.href.split("?")[0]);
+  return r;
 }

@@ -8,7 +8,7 @@ import { checkPass } from "./actions";
 import QrScan from "@/components/QrScan";
 
 export const dynamic = "force-dynamic";
-const KIND: Record<string, string> = { GUEST: "Guest", DELIVERY: "Delivery", CONTRACTOR: "Contractor", MOVE: "Move in/out", STAY: "Short stay" };
+const KIND: Record<string, string> = { GUEST: "Guest", PARKING: "Guest parking", DELIVERY: "Delivery", CONTRACTOR: "Contractor", MOVE: "Move in/out", STAY: "Short stay" };
 
 export default async function FrontDesk({ searchParams }: { searchParams: { code?: string; error?: string; ok?: string } }) {
   await requireRole("GUARD", "MANAGER", "ADMIN");
